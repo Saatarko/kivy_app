@@ -4,73 +4,60 @@ from datetime import datetime, timedelta
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
 from kivy.network.urlrequest import UrlRequest
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem, TabbedPanelStrip
+from kivy.uix.widget import Widget
 
 
-class AuthTab(TabbedPanelItem):
+class Auth(GridLayout):
     def __init__(self, **kwargs):
-        super(AuthTab, self).__init__(**kwargs)
-        self.text = 'Auth'
-        self.check_token()
+        super(Auth, self).__init__(**kwargs)
 
-    # def on_touch_down(self, touch):
-    #     if self.collide_point(*touch.pos):
-    #         # Получаем родительский объект TabbedPanel
-    #         tabbed_panel = self.parent
-    #         while not isinstance(tabbed_panel, TabbedPanel):
-    #             tabbed_panel = tabbed_panel.parent
-    #         # Проверяем, что вкладка стала активной
-    #         if tabbed_panel.current_tab != self:
-    #             tabbed_panel.switch_to(self)
-    #             if tabbed_panel.current_tab.text == 'Курсы':
-    #                 self.update_courses()
-    #             elif tabbed_panel.current_tab.text == 'Auth':
-    #                 self.check_token()
-    #     return super(AuthTab, self).on_touch_down(touch)
+    def create_logout_layout(self, parent_layout):
+        parent_layout.clear_widgets()  # Очищаем родительский layout
+        parent_layout.add_widget(Label(text='Вы уже вошли в систему'))
+        logout_button = Button(text='Logout')
+        logout_button.bind(on_press=self.logout)
+        parent_layout.add_widget(logout_button)
+        # parent_layout.add_widget(parent_layout)  # Добавляем layout в родительский layout
 
-    def check_token(self):
-        token_check = App.get_running_app().token_check
+    # def create_login_layout(self, parent_layout):
+    #     parent_layout.clear_widgets()  # Очищаем родительский layout
+    #
+    #     parent_layout.add_widget(Label(text='Username'))
+    #     self.username_input = TextInput(width=200, size_hint_x=None, multiline=False, pos_hint={'center_x': 0.5})
+    #     parent_layout.add_widget(self.username_input)
+    #     parent_layout.add_widget(Label(text='Password'))
+    #     self.password_input = TextInput(size_hint_x=0.5, password=True, multiline=False)
+    #     parent_layout.add_widget(self.password_input)
+    #     login_button = Button(text='Login', size_hint_x=0.5)
+    #     login_button.bind(on_press=self.login)
+    #     parent_layout.add_widget(login_button)
 
-        if token_check and token_check['access_token'] !='your_token' and (datetime.now() < token_check['expiry']):
-            self.create_logout_layout()
-        else:
-            # Удаление и токена, и словаря для проверки при истечении времени
-            App.get_running_app().token = None
-            App.get_running_app().token_check = None
-            self.create_login_layout()
+    def create_login_layout(self,parent_layout):
+        # Создаем отдельный GridLayout для формы логина
+        login_layout = GridLayout(rows=5)
 
-    def create_logout_layout(self):
-        def update_layout(dt):
-            self.clear_widgets()
-            layout = BoxLayout(orientation='vertical')
-            layout.add_widget(Label(text='Вы уже вошли в систему'))
-            logout_button = Button(text='Logout')
-            logout_button.bind(on_press=self.logout)
-            layout.add_widget(logout_button)
-            self.add_widget(layout)
+        # Добавляем виджеты в login_layout
+        login_layout.add_widget(Label(text='Username',size_hint_x=0.5))
+        username_input = TextInput(size_hint_x=0.5, multiline=False)
+        login_layout.add_widget(username_input)
+        login_layout.add_widget(Label(text='Password',size_hint_x=0.5))
+        password_input = TextInput(size_hint_x=0.5, password=True, multiline=False)
+        login_layout.add_widget(password_input)
+        login_button = Button(text='Login', size_hint_x=0.5)
+        login_button.bind(on_press=self.login) # Здесь должен быть ваш метод login
+        login_layout.add_widget(login_button)
 
-        Clock.schedule_once(update_layout)
+        # Очищаем родительский layout и добавляем в него login_layout
+        parent_layout.clear_widgets()
+        parent_layout.add_widget(login_layout)
 
-
-    def create_login_layout(self):
-
-        self.clear_widgets()
-        layout = BoxLayout(orientation='vertical')
-        layout.add_widget(Label(text='Username'))
-        self.username_input = TextInput(multiline=False)
-        layout.add_widget(self.username_input)
-        layout.add_widget(Label(text='Password'))
-        self.password_input = TextInput(password=True, multiline=False)
-        layout.add_widget(self.password_input)
-        login_button = Button(text='Login')
-        login_button.bind(on_press=self.login)
-        layout.add_widget(login_button)
-        self.add_widget(layout)
 
     def login(self, instance):
         username = self.username_input.text.strip()
@@ -96,17 +83,8 @@ class AuthTab(TabbedPanelItem):
             'access_token': result['access_token'],
             'expiry': datetime.now() + timedelta(minutes=55)  # Устанавливаем время истечения на 55 минут
         }
-        # Получаем доступ к родительскому TabbedPanel через свойство parent
-        tp = self.parent
-        while not isinstance(tp, TabbedPanel):
-            tp = tp.parent
 
-        # Переключаемся на вкладку курсов и вызываем метод update_courses
-        for tab in tp.tab_list:
-            if isinstance(tab, CoursesTab):
-                tp.switch_to(tab)
-                tab.update_courses()  # Вызываем метод update_courses
-                break
+
 
     def logout(self, instance):
         # Получаем текущий токен
@@ -131,106 +109,64 @@ class AuthTab(TabbedPanelItem):
         print('Ошибка при выходе из системы:', request.resp_status, result)
         self.create_login_layout()
 
+    def check_token(self, parent_layout):
+        token_check = App.get_running_app().token_check
 
-class CoursesTab(TabbedPanelItem):
-    def __init__(self, **kwargs):
-        super(CoursesTab, self).__init__(**kwargs)
-        self.text = 'Курсы'
-        layout = BoxLayout(orientation='vertical')
-        self.courses_label = Label(text='Зарегистрируйтесь и войдите для отображения доступных курсов')
-        layout.add_widget(self.courses_label)
-        self.add_widget(layout)
-
-    def update_courses(self):
-        try:
-            token = App.get_running_app().token
-            if token:
-                courses_url = 'http://127.0.0.1:8000/courses'
-                headers = {'Authorization': f'Bearer {token}'}
-                # Добавляем параметр on_redirect для обработки перенаправлений
-                UrlRequest(courses_url, req_headers=headers, on_success=self.on_courses_success,
-                           on_redirect=self.on_redirect)
-            else:
-                self.courses_label.text = 'Зарегистрируйтесь и войдите для отображения доступных курсов'
-        except Exception as e:
-            print(f'Ошибка при обновлении курсов: {e}')
-
-    def on_redirect(self, request, result):
-        # Логируем все заголовки ответа
-        print('Заголовки ответа:', request.resp_headers)
-
-        # Пытаемся получить URL для перенаправления с учетом регистра
-        redirect_url = request.resp_headers.get('location')  # Используйте 'location' в нижнем регистре
-        print('URL для перенаправления:', redirect_url)
-
-        if redirect_url:
-            token = App.get_running_app().token
-            headers = {'Authorization': f'Bearer {token}'}
-            UrlRequest(redirect_url, req_headers=headers, on_success=self.on_courses_success)
+        if token_check and token_check['access_token'] != 'your_token' and (datetime.now() < token_check['expiry']):
+            self.create_logout_layout(parent_layout)  # Добавляем layout для logout непосредственно
         else:
-            print('Ошибка: Заголовок Location отсутствует в ответе.')
-
-    def on_courses_success(self, request, result):
-        # Обновление списка курсов
-        # courses_list = '\n'.join([course['name'] for course in result])
-        # self.courses_label.text = courses_list
-
-        courses_list = '\n'.join(
-            [f"Название: {course['name']}, Описание: {course['description']}, Цена: {course['price']} руб." for course
-             in result])
-        self.courses_label.text = courses_list
-
-class MyTabbedPanel(TabbedPanel):
-    def __init__(self, **kwargs):
-        super(MyTabbedPanel, self).__init__(**kwargs)
-        self.initial_switch_done = False
-        Clock.schedule_once(self.finish_initialization)   # стопорим выполнение до полной инициализации всегоп риложения
-        self.bind(current_tab=self.on_tab_switch)
-
-    def finish_initialization(self, dt):
-        self.initial_switch_done = True
-        # Явно вызываем on_tab_switch для первой вкладки
-        self.on_tab_switch(self, self.current_tab)
-
-    def switch_to(self, header):
-        if not self.initial_switch_done:
-            return
-        super(MyTabbedPanel, self).switch_to(header)
-
-    def on_tab_switch(self, instance_of_tabbed_panel, instance_of_tab, *args):
-        if not self.initial_switch_done:
-            return
-        # Проверяем, является ли текущая вкладка вкладкой AuthTab
-        if isinstance(instance_of_tab, AuthTab):
-            instance_of_tab.check_token()
-        # Проверяем, является ли текущая вкладка вкладкой CoursesTab
-        elif isinstance(instance_of_tab, CoursesTab):
-            instance_of_tab.update_courses()
+            App.get_running_app().token = None
+            App.get_running_app().token_check = None
+            self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
 
 
 class MyApp(App):
     token = None
     token_check = None  # Добавляем атрибут для отслеживания времени истечения токена
 
-    # def build(self):
-    #     tp = TabbedPanel(do_default_tab=False)  # Убираем закладку по умолчанию
-    #     tp.add_widget(AuthTab())
-    #     tp.add_widget(CoursesTab())
-    #     return tp
-
     def build(self):
-        self.tp = MyTabbedPanel(do_default_tab=False)
-        self.auth_tab = AuthTab()
-        self.courses_tab = CoursesTab()
-        self.tp.add_widget(self.auth_tab)
-        self.tp.add_widget(self.courses_tab)
-        return self.tp
+        base_gridlayout = GridLayout(rows=2, spacing=3)
 
-    def on_start(self):
+        nav_gridlayout_onbase = GridLayout(cols=5, spacing=3, size_hint_y=0.10)
+        nav_gridlayout_onbase.add_widget(Button(text='Главная'))
+        nav_gridlayout_onbase.add_widget(Button(text='Курсы'))
+        nav_gridlayout_onbase.add_widget(Button(text='Группа'))
+        nav_gridlayout_onbase.add_widget(Widget())
+
+        self.auth_instance = Auth()
+        auth_button = Button(text='Auth')
+        auth_button.bind(on_press=self.show_auth)
+        nav_gridlayout_onbase.add_widget(auth_button)
+
+        mainpage_onbase = GridLayout(cols=2, spacing=3,size_hint_y=0.90)
+
+        left_nav_mainpage_onbase = GridLayout(rows=50, spacing=3,size_hint_x=0.20)
+        left_nav_mainpage_onbase.add_widget(Button(text='Hi 1'))
+        left_nav_mainpage_onbase.add_widget(Button(text='Hi 2'))
+        central_mainpage_onbase = GridLayout(rows=50)
+
+        self.central_mainpage_onbase = central_mainpage_onbase
+
+        mainpage_onbase.add_widget(left_nav_mainpage_onbase)
+        mainpage_onbase.add_widget(central_mainpage_onbase)
+
+        base_gridlayout.add_widget(nav_gridlayout_onbase)
+        base_gridlayout.add_widget(mainpage_onbase)
+
+        return base_gridlayout
+
+    def show_auth(self, instance):
+        self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
+        self.auth_instance.check_token(self.central_mainpage_onbase)
+
+
+def on_start(self):
         # Инициализация токена и времени его истечения
         self.token = {'access_token': 'your_token', 'token_type': 'your_type'}
         # Инициализация словаря для проверки токена
-        self.token_check = {'access_token': 'your_token', 'token_type': 'your_type', 'expiry': datetime.now() + timedelta(seconds=3600)}
+        self.token_check = {'access_token': 'your_token', 'token_type': 'your_type',
+                            'expiry': datetime.now() + timedelta(seconds=3600)}
+
 
 if __name__ == '__main__':
     MyApp().run()
