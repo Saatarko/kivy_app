@@ -12,6 +12,15 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem, TabbedPanelStrip
 from kivy.uix.widget import Widget
+from kivy.uix.popup import Popup
+from functools import partial
+
+
+def show_popup_success_login():
+    popup = Popup(title='Успех',
+                  content=Label(text='Вы успешно вошли в систему'),
+                  size_hint=(None, None), size=(400, 400))
+    popup.open()
 
 
 class Auth(GridLayout):
@@ -39,27 +48,42 @@ class Auth(GridLayout):
     #     login_button.bind(on_press=self.login)
     #     parent_layout.add_widget(login_button)
 
-    def create_login_layout(self,parent_layout):
+    def create_login_layout(self, parent_layout):
         # Создаем отдельный GridLayout для формы логина
-        login_layout = GridLayout(rows=5)
-
+        login_layout = BoxLayout(orientation='vertical')
+        login_layout.add_widget(Widget())
         # Добавляем виджеты в login_layout
-        login_layout.add_widget(Label(text='Username',size_hint_x=0.5))
-        username_input = TextInput(size_hint_x=0.5, multiline=False)
+        login_layout.add_widget(Label(text='Введите Логин и пароль для входа', size_hint_x=0.5,
+                                      pos_hint={'center_x': 0.5}))
+        login_layout.add_widget(Label(text='Логин', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        username_input = TextInput(size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
         login_layout.add_widget(username_input)
-        login_layout.add_widget(Label(text='Password',size_hint_x=0.5))
-        password_input = TextInput(size_hint_x=0.5, password=True, multiline=False)
+        login_layout.add_widget(Label(text='Пароль', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
         login_layout.add_widget(password_input)
-        login_button = Button(text='Login', size_hint_x=0.5)
-        login_button.bind(on_press=self.login) # Здесь должен быть ваш метод login
+        login_button = Button(text='Войти', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        login_button.bind(on_press=partial(self.login, parent_layout=parent_layout))
         login_layout.add_widget(login_button)
+        login_layout.add_widget(Widget())
+        login_layout.add_widget(Label(text='Или зарегистрируйтесь', size_hint_x=0.5,
+                                      pos_hint={'center_x': 0.5}))
+        login_layout.add_widget(Widget())
+        login_layout.add_widget(Label(text='Логин', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        username_input = TextInput(size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
+        login_layout.add_widget(username_input)
+        login_layout.add_widget(Label(text='Пароль', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
+        login_layout.add_widget(password_input)
+        reg_button = Button(text='Регистрация', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        reg_button.bind(on_press=partial(self.registration, parent_layout=parent_layout))
+        login_layout.add_widget(reg_button)
+        login_layout.add_widget(Widget())
 
         # Очищаем родительский layout и добавляем в него login_layout
         parent_layout.clear_widgets()
         parent_layout.add_widget(login_layout)
 
-
-    def login(self, instance):
+    def login(self, instance, parent_layout):
         username = self.username_input.text.strip()
         password = self.password_input.text.strip()
         login_url = 'http://127.0.0.1:8000/api/v1/auth/login'
@@ -68,6 +92,7 @@ class Auth(GridLayout):
             'password': password
         })
         headers = {'Content-type': 'application/x-www-form-urlencoded'}
+        parent_layout.clear_widgets()
         UrlRequest(login_url, req_body=request_data, req_headers=headers,
                    on_success=self.on_login_success, on_failure=self.on_login_failure)
 
@@ -84,7 +109,7 @@ class Auth(GridLayout):
             'expiry': datetime.now() + timedelta(minutes=55)  # Устанавливаем время истечения на 55 минут
         }
 
-
+        show_popup_success_login()
 
     def logout(self, instance):
         # Получаем текущий токен
@@ -102,12 +127,11 @@ class Auth(GridLayout):
         App.get_running_app().token = None
         App.get_running_app().token_check = None
         # Обновление вкладки аутентификации
-        self.create_login_layout()
+
         # self.check_token()
 
     def on_logout_failure(self, request, result):
         print('Ошибка при выходе из системы:', request.resp_status, result)
-        self.create_login_layout()
 
     def check_token(self, parent_layout):
         token_check = App.get_running_app().token_check
@@ -119,6 +143,9 @@ class Auth(GridLayout):
             App.get_running_app().token_check = None
             self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
 
+    def registration(self, parent_layout):
+        pass
+
 
 class MyApp(App):
     token = None
@@ -128,8 +155,13 @@ class MyApp(App):
         base_gridlayout = GridLayout(rows=2, spacing=3)
 
         nav_gridlayout_onbase = GridLayout(cols=5, spacing=3, size_hint_y=0.10)
-        nav_gridlayout_onbase.add_widget(Button(text='Главная'))
+
+        main_button = Button(text='Главная')
+        main_button.bind(on_press=self.show_main)
+        nav_gridlayout_onbase.add_widget(main_button)
+
         nav_gridlayout_onbase.add_widget(Button(text='Курсы'))
+
         nav_gridlayout_onbase.add_widget(Button(text='Группа'))
         nav_gridlayout_onbase.add_widget(Widget())
 
@@ -138,9 +170,9 @@ class MyApp(App):
         auth_button.bind(on_press=self.show_auth)
         nav_gridlayout_onbase.add_widget(auth_button)
 
-        mainpage_onbase = GridLayout(cols=2, spacing=3,size_hint_y=0.90)
+        mainpage_onbase = GridLayout(cols=2, spacing=3, size_hint_y=0.90)
 
-        left_nav_mainpage_onbase = GridLayout(rows=50, spacing=3,size_hint_x=0.20)
+        left_nav_mainpage_onbase = GridLayout(rows=50, spacing=3, size_hint_x=0.20)
         left_nav_mainpage_onbase.add_widget(Button(text='Hi 1'))
         left_nav_mainpage_onbase.add_widget(Button(text='Hi 2'))
         central_mainpage_onbase = GridLayout(rows=1)
@@ -159,13 +191,16 @@ class MyApp(App):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.auth_instance.check_token(self.central_mainpage_onbase)
 
+    def show_main(self, instance):
+        self.central_mainpage_onbase.clear_widgets()
+
 
 def on_start(self):
-        # Инициализация токена и времени его истечения
-        self.token = {'access_token': 'your_token', 'token_type': 'your_type'}
-        # Инициализация словаря для проверки токена
-        self.token_check = {'access_token': 'your_token', 'token_type': 'your_type',
-                            'expiry': datetime.now() + timedelta(seconds=3600)}
+    # Инициализация токена и времени его истечения
+    self.token = {'access_token': 'your_token', 'token_type': 'your_type'}
+    # Инициализация словаря для проверки токена
+    self.token_check = {'access_token': 'your_token', 'token_type': 'your_type',
+                        'expiry': datetime.now() + timedelta(seconds=3600)}
 
 
 if __name__ == '__main__':
