@@ -143,7 +143,7 @@ class MyApp(App):
         left_nav_mainpage_onbase = GridLayout(rows=50, spacing=3,size_hint_x=0.20)
         left_nav_mainpage_onbase.add_widget(Button(text='Hi 1'))
         left_nav_mainpage_onbase.add_widget(Button(text='Hi 2'))
-        central_mainpage_onbase = GridLayout(rows=50)
+        central_mainpage_onbase = GridLayout(rows=1)
 
         self.central_mainpage_onbase = central_mainpage_onbase
 
