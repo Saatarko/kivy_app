@@ -16,11 +16,32 @@ from kivy.uix.popup import Popup
 from functools import partial
 
 
-def show_popup_success_login():
-    popup = Popup(title='Успех',
-                  content=Label(text='Вы успешно вошли в систему'),
-                  size_hint=(None, None), size=(400, 400))
-    popup.open()
+class NotificationManager:
+    def __init__(self):
+        pass
+
+    def show_popup(self, title, message):
+        content = BoxLayout(orientation='vertical')
+        label = Label(text=message, text_size=(400, None), halign='center')
+        content.add_widget(label)
+        closed_button = Button(text='Закрыть', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+
+        popup = Popup(title=title,
+                      content=content,
+                      size_hint=(None, None), size=(400, 400))
+        closed_button.bind(on_press=popup.dismiss)  # Привязываем метод dismiss к popup
+        content.add_widget(closed_button)
+
+        popup.open()
+
+    def show_popup_success_login(self):
+        self.show_popup('Успех', 'Вы успешно вошли в систему')
+
+    def show_popup_error(self, error_message):
+        self.show_popup('Ошибка', error_message)
+
+
+notification_manager = NotificationManager()  # создаем экземпляр класса уведомлений
 
 
 class Auth(GridLayout):
@@ -28,39 +49,39 @@ class Auth(GridLayout):
         super(Auth, self).__init__(**kwargs)
 
     def create_logout_layout(self, parent_layout):
-        parent_layout.clear_widgets()  # Очищаем родительский layout
-        parent_layout.add_widget(Label(text='Вы уже вошли в систему'))
-        logout_button = Button(text='Logout')
+        login_layout = BoxLayout(orientation='vertical')
+        login_layout.clear_widgets()  # Очищаем родительский layout
+        login_layout.add_widget(Label(text='Вы уже вошли в систему'))
+        logout_button = Button(text='Выход', size_hint_x=0.5, pos_hint={'center_x': 0.5})
         logout_button.bind(on_press=self.logout)
-        parent_layout.add_widget(logout_button)
-        # parent_layout.add_widget(parent_layout)  # Добавляем layout в родительский layout
+        login_layout.add_widget(logout_button)
 
-    # def create_login_layout(self, parent_layout):
-    #     parent_layout.clear_widgets()  # Очищаем родительский layout
-    #
-    #     parent_layout.add_widget(Label(text='Username'))
-    #     self.username_input = TextInput(width=200, size_hint_x=None, multiline=False, pos_hint={'center_x': 0.5})
-    #     parent_layout.add_widget(self.username_input)
-    #     parent_layout.add_widget(Label(text='Password'))
-    #     self.password_input = TextInput(size_hint_x=0.5, password=True, multiline=False)
-    #     parent_layout.add_widget(self.password_input)
-    #     login_button = Button(text='Login', size_hint_x=0.5)
-    #     login_button.bind(on_press=self.login)
-    #     parent_layout.add_widget(login_button)
+        logout_button_closed = Button(text='Закрыть', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        logout_button_closed.bind(on_press=partial(self.closed, parent_layout=parent_layout))
+        login_layout.add_widget(logout_button_closed)
+
+        parent_layout.clear_widgets()
+        parent_layout.add_widget(login_layout)
+
+
+    def closed(self, instance, parent_layout):
+
+        parent_layout.clear_widgets()
+
 
     def create_login_layout(self, parent_layout):
         # Создаем отдельный GridLayout для формы логина
         login_layout = BoxLayout(orientation='vertical')
         login_layout.add_widget(Widget())
         # Добавляем виджеты в login_layout
-        login_layout.add_widget(Label(text='Введите Логин и пароль для входа', size_hint_x=0.5,
+        login_layout.add_widget(Label(text='Введите логин(email) и пароль для входа', size_hint_x=0.5,
                                       pos_hint={'center_x': 0.5}))
-        login_layout.add_widget(Label(text='Логин', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
-        username_input = TextInput(size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
-        login_layout.add_widget(username_input)
+        login_layout.add_widget(Label(text='Логин(email)', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        self.username_input = TextInput(size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
+        login_layout.add_widget(self.username_input)
         login_layout.add_widget(Label(text='Пароль', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
-        password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
-        login_layout.add_widget(password_input)
+        self.password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
+        login_layout.add_widget(self.password_input)
         login_button = Button(text='Войти', size_hint_x=0.5, pos_hint={'center_x': 0.5})
         login_button.bind(on_press=partial(self.login, parent_layout=parent_layout))
         login_layout.add_widget(login_button)
@@ -68,12 +89,16 @@ class Auth(GridLayout):
         login_layout.add_widget(Label(text='Или зарегистрируйтесь', size_hint_x=0.5,
                                       pos_hint={'center_x': 0.5}))
         login_layout.add_widget(Widget())
-        login_layout.add_widget(Label(text='Логин', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
-        username_input = TextInput(size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
-        login_layout.add_widget(username_input)
+        login_layout.add_widget(Label(text='Введите логин(email)', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        self.reg_username_input = TextInput(size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
+        login_layout.add_widget(self.reg_username_input)
         login_layout.add_widget(Label(text='Пароль', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
-        password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
-        login_layout.add_widget(password_input)
+        self.reg_password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
+        login_layout.add_widget(self.reg_password_input)
+        login_layout.add_widget(Label(text='Подтверждение пароля', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        self.reg_password_input2 = TextInput(size_hint_x=0.5, password=True, multiline=False,
+                                             pos_hint={'center_x': 0.5})
+        login_layout.add_widget(self.reg_password_input2)
         reg_button = Button(text='Регистрация', size_hint_x=0.5, pos_hint={'center_x': 0.5})
         reg_button.bind(on_press=partial(self.registration, parent_layout=parent_layout))
         login_layout.add_widget(reg_button)
@@ -97,7 +122,9 @@ class Auth(GridLayout):
                    on_success=self.on_login_success, on_failure=self.on_login_failure)
 
     def on_login_failure(self, request, result):
-        print('Ошибка аутентификации:', request.resp_status, result)
+        message =  'Ошибка аутентификации: или некорректные данные или пользователя не существует'
+        notification_manager.show_popup_error(message)
+        # print('Ошибка аутентификации:', request.resp_status, result)
 
     def on_login_success(self, request, result):
         # Сохранение токена аутентификации и переход к экрану курсов
@@ -109,7 +136,7 @@ class Auth(GridLayout):
             'expiry': datetime.now() + timedelta(minutes=55)  # Устанавливаем время истечения на 55 минут
         }
 
-        show_popup_success_login()
+        notification_manager.show_popup_success_login()
 
     def logout(self, instance):
         # Получаем текущий токен
