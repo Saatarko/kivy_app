@@ -85,7 +85,9 @@ class Auth(GridLayout):
         if data['first_name'] != '':
             login_layout.add_widget(Label(text='Данные пользователя'))
         else:
-            login_layout.add_widget(Label(text='Введите Ваши данные (требуется для записи'))
+            login_layout.add_widget(Label(text='Введите Ваши данные (требуется для записи на курсы'),
+                                    text_size=(200, None), halign='center')
+
         login_layout.add_widget(Widget())
 
         login_layout.add_widget(Label(text='Имя'))
@@ -384,6 +386,21 @@ class Auth(GridLayout):
                    on_success=self.on_login_success, on_failure=self.on_login_failure)
         notification_manager.show_popup_success_reg()
 
+class Courses(GridLayout):
+    def __init__(self, **kwargs):
+        super(Courses, self).__init__(**kwargs)
+
+    def check_token(self, parent_layout):
+        token_check = App.get_running_app().token_check
+
+        if token_check and token_check['access_token'] != 'your_token' and (datetime.now() < token_check['expiry']):
+            pass
+        else:
+            App.get_running_app().token = None
+            App.get_running_app().token_check = None
+            pass
+
+
 
 class MyApp(App):
     token = None
@@ -403,7 +420,13 @@ class MyApp(App):
         main_button.bind(on_press=self.show_main)
         nav_gridlayout_onbase.add_widget(main_button)
 
-        nav_gridlayout_onbase.add_widget(Button(text='Курсы'))
+
+        self.courses_instance = Courses()
+        courses_button = Button(text='Курсы')
+        courses_button.bind(on_press=self.show_courses)
+        nav_gridlayout_onbase.add_widget(courses_button)
+
+
 
         nav_gridlayout_onbase.add_widget(Button(text='Группа'))
         nav_gridlayout_onbase.add_widget(Widget())
@@ -421,6 +444,7 @@ class MyApp(App):
         central_mainpage_onbase = GridLayout(rows=1)
 
         self.central_mainpage_onbase = central_mainpage_onbase
+        self.left_nav_mainpage_onbase = left_nav_mainpage_onbase
 
         mainpage_onbase.add_widget(left_nav_mainpage_onbase)
         mainpage_onbase.add_widget(central_mainpage_onbase)
@@ -437,6 +461,9 @@ class MyApp(App):
     def show_main(self, instance):
         self.central_mainpage_onbase.clear_widgets()
 
+    def show_courses(self, instance):
+        self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
+        self.courses_instance.check_token(self.central_mainpage_onbase)
 
 def on_start(self):
     # Инициализация токена и времени его истечения
