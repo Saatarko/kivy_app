@@ -1,5 +1,4 @@
 import json
-from typing import Any
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
 from kivy.app import App
@@ -41,15 +40,6 @@ class NotificationManager:
     def show_popup_success_reg(self):
         self.show_popup('Успех', 'Вы успешно зарегистрировались в системе')
 
-    def show_popup_success_logout(self):
-        self.show_popup('Успех', 'Вы успешно вышли из системы')
-
-    def show_popup_update_people(self):
-        self.show_popup('Успех', 'Вы успешно обновили данные профиля')
-
-    def show_popup_create_people(self):
-        self.show_popup('Успех', 'Вы успешно создали профиль')
-
     def show_popup_error(self, error_message):
         self.show_popup('Ошибка', error_message)
 
@@ -61,55 +51,21 @@ class Auth(GridLayout):
     def __init__(self, **kwargs):
         super(Auth, self).__init__(**kwargs)
 
-    def create_logout_layout(self, parent_layout, data):
-
-        if data['first_name'] != '':
-            first_name = data['first_name']
-            last_name = data['last_name']
-            age = data['age']
-            pk = data['pk']
-            save_button = Button(text='Обновить данные профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5})
-            save_button.bind(on_press=partial(self.update_people, parent_layout=parent_layout, pk=pk))
-        else:
-            first_name = ''
-            last_name = ''
-            age = 0
-            save_button = Button(text='Сохранить данные профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5})
-            save_button.bind(on_press=partial(self.create_people, parent_layout=parent_layout))
-
-
-
+    def create_logout_layout(self, parent_layout):
         login_layout = BoxLayout(orientation='vertical')
         login_layout.clear_widgets()  # Очищаем родительский layout
-        login_layout.add_widget(Label(text='Вы уже вошли в систему'))
-        if data['first_name'] != '':
-            login_layout.add_widget(Label(text='Данные пользователя'))
-        else:
-            login_layout.add_widget(Label(text='Введите Ваши данные (требуется для записи'))
         login_layout.add_widget(Widget())
-
+        login_layout.add_widget(Label(text='Данные пользователя'))
+        login_layout.add_widget(Widget())
         login_layout.add_widget(Label(text='Имя'))
-        self.firstname_input = TextInput(text=f'{first_name}', size_hint_x=0.5, multiline=False,
-                                         pos_hint={'center_x': 0.5})
-        login_layout.add_widget(self.firstname_input)
-
         login_layout.add_widget(Label(text='Фамилия'))
-        self.lastname_input = TextInput(text=f'{last_name}', size_hint_x=0.5, multiline=False,
-                                        pos_hint={'center_x': 0.5})
-        login_layout.add_widget(self.lastname_input)
-
         login_layout.add_widget(Label(text='Возраст'))
-        self.age_input = TextInput(text=f'{age}', size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
-        login_layout.add_widget(self.age_input)
-        login_layout.add_widget(Widget())
-
-        login_layout.add_widget(save_button)
-
-        logout_button = Button(text='Выход из системы', size_hint_x=0.5, pos_hint={'center_x': 0.5})
-        logout_button.bind(on_press=partial(self.logout, parent_layout=parent_layout))
+        login_layout.add_widget(Label(text='Вы уже вошли в систему'))
+        logout_button = Button(text='Выход', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        logout_button.bind(on_press=self.logout)
         login_layout.add_widget(logout_button)
 
-        logout_button_closed = Button(text='Закрыть окно профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        logout_button_closed = Button(text='Закрыть', size_hint_x=0.5, pos_hint={'center_x': 0.5})
         logout_button_closed.bind(on_press=partial(self.closed, parent_layout=parent_layout))
         login_layout.add_widget(logout_button_closed)
 
@@ -119,69 +75,6 @@ class Auth(GridLayout):
     def closed(self, instance, parent_layout):
 
         parent_layout.clear_widgets()
-
-    def update_people(self, instance, parent_layout, pk):
-        token = App.get_running_app().token
-        if token:
-            user_url = f'http://127.0.0.1:8000/people/update/{pk}'
-            headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
-
-            first_name = self.firstname_input.text.strip()
-            last_name = self.lastname_input.text.strip()
-            age = self.age_input.text.strip()
-            request_data = json.dumps({
-                'first_name': first_name,
-                'last_name': last_name,
-                'age': age,
-            })
-
-            parent_layout.clear_widgets()
-            UrlRequest(user_url, method='PUT', req_body=request_data, req_headers=headers,
-                       on_success=self.on_update_people_success, on_failure=self.on_update_people_failure)
-
-    def on_update_people_success(self, request, result):
-        # Сохранение токена аутентификации и переход к экрану курсов
-        notification_manager.show_popup_update_people()
-
-    def on_update_people_failure(self, request, result):
-        msg = result['detail'][0]['msg']
-        message = f'Ошибка обновления профиля: {msg}'
-        notification_manager.show_popup_error(message)
-
-    def create_people(self, instance, parent_layout):
-
-        token = App.get_running_app().token
-        if token:
-            create_people_url = 'http://127.0.0.1:8000/people/'
-            headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
-
-            first_name = self.firstname_input.text.strip()
-            last_name = self.lastname_input.text.strip()
-            age = self.age_input.text.strip()
-
-            request_data = json.dumps({
-                'first_name': first_name,
-                'last_name': last_name,
-                'age': age,
-            })
-
-            parent_layout.clear_widgets()
-
-            UrlRequest(create_people_url, method='POST', req_body=request_data, req_headers=headers,
-                       on_success=self.on_create_people_success,
-                       on_failure=self.create_people_failure)
-
-    def on_create_people_success(self, request, result):
-        # Сохранение токена аутентификации и переход к экрану курсов
-        notification_manager.show_popup_create_people()
-
-    def create_people_failure(self, request, result):
-        msg = result['detail'][0]['msg']
-        message = f'Ошибка создания профиля: {msg}'
-        notification_manager.show_popup_error(message)
-
-
-
 
     def create_login_layout(self, parent_layout):
         # Создаем отдельный GridLayout для формы логина
@@ -253,14 +146,13 @@ class Auth(GridLayout):
 
         notification_manager.show_popup_success_login()
 
-    def logout(self, instance, parent_layout):
+    def logout(self, instance):
         # Получаем текущий токен
         token = App.get_running_app().token
         if token:
             logout_url = 'http://127.0.0.1:8000/api/v1/auth/logout'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
 
-            parent_layout.clear_widgets()
             # Используем POST-запрос для выхода из системы
             UrlRequest(logout_url, method='POST', req_headers=headers, on_success=self.on_logout_success,
                        on_failure=self.on_logout_failure)
@@ -269,7 +161,6 @@ class Auth(GridLayout):
         # Сброс токена после успешного выхода из системы
         App.get_running_app().token = None
         App.get_running_app().token_check = None
-        notification_manager.show_popup_success_logout()
         # Обновление вкладки аутентификации
 
     def on_logout_failure(self, request, result):
@@ -281,70 +172,52 @@ class Auth(GridLayout):
         token_check = App.get_running_app().token_check
 
         if token_check and token_check['access_token'] != 'your_token' and (datetime.now() < token_check['expiry']):
-            self.check_profile('out', lambda data: self.create_logout_layout(parent_layout, data))
+            self.check_profile()
+            self.create_logout_layout(parent_layout)  # Добавляем layout для logout непосредственно
         else:
             App.get_running_app().token = None
             App.get_running_app().token_check = None
             self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
 
-    # def check_token(self, parent_layout):
-    #     token_check = App.get_running_app().token_check
-    #
-    #     if token_check and token_check['access_token'] != 'your_token' and (datetime.now() < token_check['expiry']):
-    #         self.check_profile('out', lambda data: self.create_logout_layout(parent_layout, data))
-    #     else:
-    #         App.get_running_app().token = None
-    #         App.get_running_app().token_check = None
-    #         self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
+    def check_profile(self):
 
-    def check_profile(self, type, callback=None):  # callback заставляет асинхронщиу дожидаться ответа по функции
-        if isinstance(type, str):
-            token = App.get_running_app().token
-            if token:
-                user_url = 'http://127.0.0.1:8000/api/v1/auth/me'
-                headers = {'Authorization': f'Bearer {token}'}
-                UrlRequest(user_url, req_headers=headers,
-                           on_success=lambda req, res: self.on_check_profile_success(req, res, callback),
-                           on_failure=self.on_check_profile_failure)
-        else:
-            return type
+        token = App.get_running_app().token
+        if token:
+            user_url = 'http://127.0.0.1:8000/api/v1/auth/me'
+            headers = {'Authorization': f'Bearer {token}'}
+            UrlRequest(user_url, req_headers=headers, on_success=self.on_check_profile_success,
+                       on_failure=self.on_check_profile_failure)
 
     def on_check_profile_failure(self, request, result):
         msg = result['detail'][0]['msg']
-        message = f'Ошибка: {msg}'
+        message = f'Ошибка регистрации: {msg}'
         notification_manager.show_popup_error(message)
 
-    def on_check_profile_success(self, request, result, callback=None):
+    def on_check_profile_success(self, request, result):
+
         pk = result['id']
         token = App.get_running_app().token
         if token:
             profile_url = f'http://127.0.0.1:8000/people/{pk}'
             headers = {'Authorization': f'Bearer {token}'}
             # Добавляем параметр on_redirect для обработки перенаправлений
-            UrlRequest(profile_url, req_headers=headers,
-                       on_success=lambda req, res: self.on_people_success(req, pk, res, callback),
-                       on_failure=lambda req, res: self.on_people_failure(req, pk, res, callback))
-        else:
-            if callback:
-                callback(result)
+            UrlRequest(profile_url, req_headers=headers, on_success=self.on_people_success,
+                       on_failure=self.on_people_failure)
 
-    def on_people_success(self, request, pk, result, callback=None):
+    def on_people_success(self, request, result):
+
         data = {'first_name': result['first_name'],
                 'last_name': result['last_name'],
                 'age': result['age'],
-                'pk': pk,
                 }
-        if callback:
-            callback(data)
+        return data
 
-    def on_people_failure(self, request, pk, result, callback=None):
+    def on_people_failure(self, request, result):
         data = {'first_name': '',
                 'last_name': '',
                 'age': '',
-                'pk': pk,
                 }
-        if callback:
-            callback(data)
+        return data
 
     def registration(self, instance, parent_layout):
         email = self.reg_username_input.text.strip()
@@ -388,11 +261,6 @@ class Auth(GridLayout):
 class MyApp(App):
     token = None
     token_check = None  # Добавляем атрибут для отслеживания времени истечения токена
-
-    data = {'first_name': '',  # данные для профиля по умолчанию
-            'last_name': '',
-            'age': 0,
-            }
 
     def build(self):
         base_gridlayout = GridLayout(rows=2, spacing=3)
