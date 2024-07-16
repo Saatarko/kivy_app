@@ -77,16 +77,15 @@ class Auth(GridLayout):
             save_button = Button(text='Сохранить данные профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5})
             save_button.bind(on_press=partial(self.create_people, parent_layout=parent_layout))
 
-
-
         login_layout = BoxLayout(orientation='vertical')
         login_layout.clear_widgets()  # Очищаем родительский layout
         login_layout.add_widget(Label(text='Вы уже вошли в систему'))
         if data['first_name'] != '':
             login_layout.add_widget(Label(text='Данные пользователя'))
         else:
-            login_layout.add_widget(Label(text='Введите Ваши данные (требуется для записи на курсы'),
-                                    text_size=(200, None), halign='center')
+            label1 = Label(text='Введите Ваши данные (требуется для записи на курсы)', text_size=(400, None),
+                           halign='center')
+            login_layout.add_widget(label1)
 
         login_layout.add_widget(Widget())
 
@@ -182,9 +181,6 @@ class Auth(GridLayout):
         message = f'Ошибка создания профиля: {msg}'
         notification_manager.show_popup_error(message)
 
-
-
-
     def create_login_layout(self, parent_layout):
         # Создаем отдельный GridLayout для формы логина
         login_layout = BoxLayout(orientation='vertical')
@@ -279,8 +275,9 @@ class Auth(GridLayout):
         message = f'Ошибка при выходе из системы: {msg}'
         notification_manager.show_popup_error(message)
 
-    def check_token(self, parent_layout):
+    def check_token(self, parent_layout, left_layout):
         token_check = App.get_running_app().token_check
+        left_layout.clear_widgets()
 
         if token_check and token_check['access_token'] != 'your_token' and (datetime.now() < token_check['expiry']):
             self.check_profile('out', lambda data: self.create_logout_layout(parent_layout, data))
@@ -386,20 +383,91 @@ class Auth(GridLayout):
                    on_success=self.on_login_success, on_failure=self.on_login_failure)
         notification_manager.show_popup_success_reg()
 
+
 class Courses(GridLayout):
     def __init__(self, **kwargs):
         super(Courses, self).__init__(**kwargs)
 
-    def check_token(self, parent_layout):
+    def check_token(self, parent_layout, left_layout):
+        parent_layout.clear_widgets()
+        left_layout.clear_widgets()
+
         token_check = App.get_running_app().token_check
 
         if token_check and token_check['access_token'] != 'your_token' and (datetime.now() < token_check['expiry']):
-            pass
+            self.check_courses(parent_layout, left_layout)
         else:
             App.get_running_app().token = None
             App.get_running_app().token_check = None
-            pass
 
+            message = 'Для просмотра курсов войдите в систему. Если не зарегистрированы- зарегистрируйтесь!'
+            notification_manager.show_popup_error(message)
+
+    def check_courses(self, parent_layout, left_layout):
+
+        token = App.get_running_app().token
+
+        courses_url = 'http://127.0.0.1:8000/courses'
+        headers = {'Authorization': f'Bearer {token}'}
+        # Добавляем параметр on_redirect для обработки перенаправлений
+        UrlRequest(courses_url, req_headers=headers,
+                   on_success=lambda req, res: self.on_courses_success(req, res, parent_layout, left_layout),
+                   on_redirect=lambda req, res: self.on_redirect(req, res, parent_layout, left_layout))
+
+    def on_redirect(self, request, result, parent_layout, left_layout):
+        # # Логируем все заголовки ответа
+        # print('Заголовки ответа:', request.resp_headers)
+        # Пытаемся получить URL для перенаправления с учетом регистра
+        redirect_url = request.resp_headers.get('location')  # Используйте 'location' в нижнем регистре
+        # print('URL для перенаправления:', redirect_url)
+
+        if redirect_url:
+            token = App.get_running_app().token
+            headers = {'Authorization': f'Bearer {token}'}
+            UrlRequest(redirect_url, req_headers=headers,
+                       on_success=lambda req, res: self.on_courses_success(req, res, parent_layout, left_layout))
+        else:
+            print('Ошибка: Заголовок Location отсутствует в ответе.')
+
+    def on_courses_success(self, request, result, parent_layout, left_layout):
+        parent_layout.clear_widgets()
+        left_layout.clear_widgets()
+        courses_name_layout = BoxLayout(orientation='vertical')
+
+        for course in result:
+            temp_text = course['name']
+            temp_id = course['id']
+            courses_name = Button(text=temp_text)
+            courses_name.bind(
+                on_press=partial(self.course_description, temp_id=temp_id, result=result, parent_layout=parent_layout))
+            courses_name_layout.add_widget(courses_name)
+
+        left_layout.add_widget(courses_name_layout)
+
+
+    def course_description(self,  instance, temp_id, result, parent_layout):
+        parent_layout.clear_widgets()
+        courses_description_layout = BoxLayout(orientation='vertical')
+        for i in range(len(result)):
+            if temp_id == result[i]['id']:
+                name = 'Название курсов:' + result[i]['name']
+                description = result[i]['description']
+                price = result[i]['price']
+                price = 'Ориентировочная цена за курсы:' + str(price)+ '.00 белорусских рублей'
+
+        label_name = Label(text=name, text_size=(400, None),
+                       halign='center')
+        label_description = Label(text=description, text_size=(400, None),
+                       halign='center')
+        label_price = Label(text=price, text_size=(400, None),
+                                  halign='center')
+        courses_description_layout.add_widget(label_name)
+        courses_description_layout.add_widget(Widget())
+        courses_description_layout.add_widget(label_description)
+        courses_description_layout.add_widget(Widget())
+        courses_description_layout.add_widget(label_price)
+
+        parent_layout.add_widget(courses_description_layout)
 
 
 class MyApp(App):
@@ -420,13 +488,10 @@ class MyApp(App):
         main_button.bind(on_press=self.show_main)
         nav_gridlayout_onbase.add_widget(main_button)
 
-
         self.courses_instance = Courses()
         courses_button = Button(text='Курсы')
         courses_button.bind(on_press=self.show_courses)
         nav_gridlayout_onbase.add_widget(courses_button)
-
-
 
         nav_gridlayout_onbase.add_widget(Button(text='Группа'))
         nav_gridlayout_onbase.add_widget(Widget())
@@ -438,9 +503,8 @@ class MyApp(App):
 
         mainpage_onbase = GridLayout(cols=2, spacing=3, size_hint_y=0.90)
 
-        left_nav_mainpage_onbase = GridLayout(rows=50, spacing=3, size_hint_x=0.20)
-        left_nav_mainpage_onbase.add_widget(Button(text='Hi 1'))
-        left_nav_mainpage_onbase.add_widget(Button(text='Hi 2'))
+        left_nav_mainpage_onbase = GridLayout(rows=1, spacing=3, size_hint_x=0.20)
+
         central_mainpage_onbase = GridLayout(rows=1)
 
         self.central_mainpage_onbase = central_mainpage_onbase
@@ -456,14 +520,16 @@ class MyApp(App):
 
     def show_auth(self, instance):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
-        self.auth_instance.check_token(self.central_mainpage_onbase)
+        self.auth_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
 
     def show_main(self, instance):
         self.central_mainpage_onbase.clear_widgets()
+        self.left_nav_mainpage_onbase.clear_widgets()
 
     def show_courses(self, instance):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
-        self.courses_instance.check_token(self.central_mainpage_onbase)
+        self.courses_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
+
 
 def on_start(self):
     # Инициализация токена и времени его истечения
