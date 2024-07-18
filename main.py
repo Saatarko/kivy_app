@@ -50,6 +50,9 @@ class NotificationManager:
     def show_popup_create_people(self):
         self.show_popup('Успех', 'Вы успешно создали профиль')
 
+    def show_popup_order_courses(self):
+        self.show_popup('Успех', 'Вы успешно записались на курсы')
+
     def show_popup_error(self, error_message):
         self.show_popup('Ошибка', error_message)
 
@@ -145,7 +148,7 @@ class Auth(GridLayout):
         notification_manager.show_popup_update_people()
 
     def on_update_people_failure(self, request, result):
-        msg = result['detail'][0]['msg']
+        msg = result['detail']
         message = f'Ошибка обновления профиля: {msg}'
         notification_manager.show_popup_error(message)
 
@@ -177,7 +180,7 @@ class Auth(GridLayout):
         notification_manager.show_popup_create_people()
 
     def create_people_failure(self, request, result):
-        msg = result['detail'][0]['msg']
+        msg = result['detail']
         message = f'Ошибка создания профиля: {msg}'
         notification_manager.show_popup_error(message)
 
@@ -234,7 +237,7 @@ class Auth(GridLayout):
                    on_success=self.on_login_success, on_failure=self.on_login_failure)
 
     def on_login_failure(self, request, result):
-        msg = result['detail'][0]['msg']
+        msg = result['detail']
         message = f'Ошибка аутентификации(некорректные данные или пользователя не существует): {msg}'
         notification_manager.show_popup_error(message)
         # print('Ошибка аутентификации:', request.resp_status, result)
@@ -368,7 +371,7 @@ class Auth(GridLayout):
             notification_manager.show_popup_error(message)
 
     def on_reg_failure(self, request, result):
-        msg = result['detail'][0]['msg']
+        msg = result['detail']
         message = f'Ошибка регистрации: {msg}'
         notification_manager.show_popup_error(message)
 
@@ -425,9 +428,15 @@ class Courses(GridLayout):
             token = App.get_running_app().token
             headers = {'Authorization': f'Bearer {token}'}
             UrlRequest(redirect_url, req_headers=headers,
-                       on_success=lambda req, res: self.on_courses_success(req, res, parent_layout, left_layout))
+                       on_success=lambda req, res: self.on_courses_success(req, res, parent_layout, left_layout),
+                       on_failure=self.on_courses_failure)
         else:
             print('Ошибка: Заголовок Location отсутствует в ответе.')
+
+    def on_courses_failure(self, request, result):
+        msg = result['detail']
+        message = f'Ошибка: {msg}'
+        notification_manager.show_popup_error(message)
 
     def on_courses_success(self, request, result, parent_layout, left_layout):
         parent_layout.clear_widgets()
@@ -444,8 +453,7 @@ class Courses(GridLayout):
 
         left_layout.add_widget(courses_name_layout)
 
-
-    def course_description(self,  instance, temp_id, result, parent_layout):
+    def course_description(self, instance, temp_id, result, parent_layout):
         parent_layout.clear_widgets()
         courses_description_layout = BoxLayout(orientation='vertical')
         for i in range(len(result)):
@@ -453,21 +461,50 @@ class Courses(GridLayout):
                 name = 'Название курсов:' + result[i]['name']
                 description = result[i]['description']
                 price = result[i]['price']
-                price = 'Ориентировочная цена за курсы:' + str(price)+ '.00 белорусских рублей'
+                price = 'Ориентировочная цена за курсы:' + str(price) + '.00 белорусских рублей'
+                true_id = result[i]['id']
 
         label_name = Label(text=name, text_size=(400, None),
-                       halign='center')
+                           halign='center')
         label_description = Label(text=description, text_size=(400, None),
-                       halign='center')
-        label_price = Label(text=price, text_size=(400, None),
                                   halign='center')
+        label_price = Label(text=price, text_size=(400, None),
+                            halign='center')
         courses_description_layout.add_widget(label_name)
         courses_description_layout.add_widget(Widget())
         courses_description_layout.add_widget(label_description)
         courses_description_layout.add_widget(Widget())
         courses_description_layout.add_widget(label_price)
 
+        courses_order = Button(text='Записаться на курсы')
+        courses_order.bind(
+            on_press=partial(self.course_order, true_id=true_id, result=result, parent_layout=parent_layout))
+        courses_description_layout.add_widget(courses_order)
+
         parent_layout.add_widget(courses_description_layout)
+
+    def course_order(self, instance, true_id, result, parent_layout):
+
+        token = App.get_running_app().token
+        if token:
+            profile_url = f'http://127.0.0.1:8000/peoplecoursesassociation/{true_id}'
+            headers = {'Authorization': f'Bearer {token}'}
+            request_data = json.dumps({
+                'courses_id': true_id
+            })
+            # Добавляем параметр on_redirect для обработки перенаправлений
+            UrlRequest(profile_url, method='POST', req_headers=headers, req_body=request_data,
+                       on_success=self.on_course_order_success,
+                       on_failure=self.on_course_order_failure)
+
+    def on_course_order_failure(self, request, result):
+        msg = result['detail']
+        message = f'Ошибка записи на курсы: {msg}'
+        notification_manager.show_popup_error(message)
+
+    def on_course_order_success(self, request, result):
+
+        notification_manager.show_popup_order_courses()
 
 
 class MyApp(App):
