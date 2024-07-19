@@ -637,6 +637,9 @@ class Groups(GridLayout):
         label1 = Label(text=name, text_size=(60, None),
                        halign='center')
 
+        temp_groupe_val = result
+        temp_id_val = temp_id
+
         groups_name_layout.add_widget(label1)
 
         chat_button = Button(text='Чат')
@@ -647,7 +650,8 @@ class Groups(GridLayout):
 
         lection_button = Button(text='Лекции')
         lection_button.bind(
-            on_press=self.open_lection)
+            on_press= partial(self.open_lection, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val, left_layout=left_layout,
+                           parent_layout=parent_layout))
         groups_name_layout.add_widget(Widget())
         groups_name_layout.add_widget(lection_button)
 
@@ -661,10 +665,76 @@ class Groups(GridLayout):
     def open_chat(self):
         pass
 
-    def open_lection(self):
+    def open_lection(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
 
-        pass
+        left_layout.clear_widgets()
+        token = App.get_running_app().token
 
+        url = 'http://127.0.0.1:8000/lessons/list'
+        headers = {'Authorization': f'Bearer {token}'}
+
+        request_data = json.dumps({
+            'id': temp_id_val
+        })
+
+        UrlRequest(url, method='POST', req_headers=headers, req_body=request_data,
+                   on_success= lambda req, res: self.on_open_lection_success(req, res, temp_groupe_val, temp_id_val,
+                                                                             left_layout, parent_layout),
+                   on_failure=self.on_open_lection_failure)
+
+    def on_open_lection_failure(self, request, result):
+        msg = result['detail']
+        message = f'Ошибка при загрузке данных по лекциям: {msg}'
+        notification_manager.show_popup_error(message)
+
+    def on_open_lection_success(self, request, result, temp_groupe_val, temp_id_val, left_layout, parent_layout):
+        parent_layout.clear_widgets()
+        left_layout.clear_widgets()
+        groups_name_layout = BoxLayout(orientation='vertical')
+        groups_name_layout.add_widget(Label(text='Лекции'))
+
+        for lesson in result:
+            temp_text = lesson['title']
+            temp_id = lesson['id']
+            lesson_button = Button(text=temp_text)
+            lesson_button.bind(
+                on_press=partial(self.lesson_description, temp_id=temp_id, result=result, left_layout=left_layout,
+                                 parent_layout=parent_layout))
+            groups_name_layout.add_widget(lesson_button)
+            groups_name_layout.add_widget(Widget())
+
+        back_button2 = Button(text='Назад')
+        temp_id = temp_id_val
+        back_button2.bind(
+            on_press=partial(self.groupe_in, temp_id=temp_id, result=temp_groupe_val, left_layout=left_layout, parent_layout=parent_layout))
+        groups_name_layout.add_widget(Widget())
+        groups_name_layout.add_widget(back_button2)
+
+        left_layout.add_widget(groups_name_layout)
+
+
+    def lesson_description(self, instance, temp_id, result, left_layout, parent_layout):
+
+        parent_layout.clear_widgets()
+        courses_description_layout = BoxLayout(orientation='vertical')
+        for i in range(len(result)):
+            if temp_id == result[i]['id']:
+                name = 'Лекция:' + result[i]['title']
+                description = result[i]['document_path']
+                true_id = result[i]['id']
+                break
+
+        label_name = Label(text=name, text_size=(400, None),
+                           halign='center')
+        label_description = Label(text=description, text_size=(400, None),
+                                  halign='center')
+
+        courses_description_layout.add_widget(label_name)
+        courses_description_layout.add_widget(Widget())
+        courses_description_layout.add_widget(label_description)
+        courses_description_layout.add_widget(Widget())
+
+        parent_layout.add_widget(courses_description_layout)
 
 class MyApp(App):
     token = None
