@@ -53,6 +53,9 @@ class NotificationManager:
     def show_popup_order_courses(self):
         self.show_popup('Успех', 'Вы успешно записались на курсы')
 
+    def show_popup_order_courses_and_groups(self):
+        self.show_popup('Успех', 'Вы успешно зачислены в группу')
+
     def show_popup_error(self, error_message):
         self.show_popup('Ошибка', error_message)
 
@@ -61,8 +64,9 @@ notification_manager = NotificationManager()  # создаем экземпля�
 
 
 class Auth(GridLayout):
-    def __init__(self, **kwargs):
+    def __init__(self, app, **kwargs):
         super(Auth, self).__init__(**kwargs)
+        self.app = app
 
     def create_logout_layout(self, parent_layout, data):
 
@@ -238,7 +242,7 @@ class Auth(GridLayout):
 
     def on_login_failure(self, request, result):
         msg = result['detail']
-        message = f'Ошибка аутентификации(некорректные данные или пользователя не существует): {msg}'
+        message = f'Ошибка аутентификации(некорректные данные или пользователя не существует)'
         notification_manager.show_popup_error(message)
         # print('Ошибка аутентификации:', request.resp_status, result)
 
@@ -252,7 +256,30 @@ class Auth(GridLayout):
             'expiry': datetime.now() + timedelta(minutes=55)  # Устанавливаем время истечения на 55 минут
         }
 
+        self.app.on_auth_success(None)
+        self.app.change_button_name(None, 'Профиль')
+
         notification_manager.show_popup_success_login()
+
+        token = App.get_running_app().token
+        if token:
+            profile_url = f'http://127.0.0.1:8000/people/check'
+            headers = {'Authorization': f'Bearer {token}'}
+            # Добавляем параметр on_redirect для обработки перенаправлений
+            UrlRequest(profile_url, req_headers=headers,
+                       on_success=self.on_check_success,
+                       on_failure=self.on_check_failure)
+
+    def on_check_failure(self, request, result):
+        msg = result['detail']
+        message = f'Ошибка связи с севером: {msg}'
+        notification_manager.show_popup_error(message)
+        # print('Ошибка аутентификации:', request.resp_status, result)
+
+    def on_check_success(self, request, result):
+
+        if result['courses_and_groups_check']['check_group'] is True:
+            self.app.on_group_success(None)
 
     def logout(self, instance, parent_layout):
         # Получаем текущий токен
@@ -270,11 +297,14 @@ class Auth(GridLayout):
         # Сброс токена после успешного выхода из системы
         App.get_running_app().token = None
         App.get_running_app().token_check = None
+
+        self.app.hide_button_on_logout(None)  # убираем кнпоки при выходе
+
         notification_manager.show_popup_success_logout()
         # Обновление вкладки аутентификации
 
     def on_logout_failure(self, request, result):
-        msg = result['detail'][0]['msg']
+        msg = result['detail']
         message = f'Ошибка при выходе из системы: {msg}'
         notification_manager.show_popup_error(message)
 
@@ -388,8 +418,9 @@ class Auth(GridLayout):
 
 
 class Courses(GridLayout):
-    def __init__(self, **kwargs):
+    def __init__(self, app, **kwargs):
         super(Courses, self).__init__(**kwargs)
+        self.app = app
 
     def check_token(self, parent_layout, left_layout):
         parent_layout.clear_widgets()
@@ -489,12 +520,13 @@ class Courses(GridLayout):
         if token:
             profile_url = f'http://127.0.0.1:8000/peoplecoursesassociation/{true_id}'
             headers = {'Authorization': f'Bearer {token}'}
+            courses_id = true_id
             request_data = json.dumps({
-                'courses_id': true_id
+                'courses_id': courses_id
             })
             # Добавляем параметр on_redirect для обработки перенаправлений
             UrlRequest(profile_url, method='POST', req_headers=headers, req_body=request_data,
-                       on_success=self.on_course_order_success,
+                       on_success=lambda req, res: self.on_course_order_success_and_add_groups(req, res, courses_id),
                        on_failure=self.on_course_order_failure)
 
     def on_course_order_failure(self, request, result):
@@ -502,9 +534,136 @@ class Courses(GridLayout):
         message = f'Ошибка записи на курсы: {msg}'
         notification_manager.show_popup_error(message)
 
-    def on_course_order_success(self, request, result):
+    def on_course_order_success_and_add_groups(self, request, result, courses_id):
 
         notification_manager.show_popup_order_courses()
+        token = App.get_running_app().token
+        if token:
+            url = f'http://127.0.0.1:8000/peoplegroupesassociation/'
+            headers = {'Authorization': f'Bearer {token}'}
+
+            request_data = json.dumps({
+                'courses_id': courses_id
+            })
+            # Добавляем параметр on_redirect для обработки перенаправлений
+            UrlRequest(url, method='POST', req_headers=headers, req_body=request_data,
+                       on_success=self.on_course_order_success_all,
+                       on_failure=self.on_course_order_failure_all)
+
+    def on_course_order_failure_all(self, request, result):
+        msg = result['detail']
+        message = f'Ошибка записи в группу: {msg}'
+        notification_manager.show_popup_error(message)
+
+    def on_course_order_success_all(self, request, result):
+        self.app.on_group_success(None)
+        notification_manager.show_popup_order_courses_and_groups()
+
+
+class Groups(GridLayout):
+    def __init__(self, app, **kwargs):
+        super(Groups, self).__init__(**kwargs)
+        self.app = app
+
+    def check_token(self, parent_layout, left_layout):
+        parent_layout.clear_widgets()
+        left_layout.clear_widgets()
+
+        token_check = App.get_running_app().token_check
+
+        if token_check and token_check['access_token'] != 'your_token' and (datetime.now() < token_check['expiry']):
+            self.check_groups(parent_layout, left_layout)
+        else:
+            App.get_running_app().token = None
+            App.get_running_app().token_check = None
+
+    def check_groups(self, parent_layout, left_layout):
+
+        token = App.get_running_app().token
+
+        url = 'http://127.0.0.1:8000/peoplegroupesassociation/check'
+        headers = {'Authorization': f'Bearer {token}'}
+        # Добавляем параметр on_redirect для обработки перенаправлений
+        UrlRequest(url, req_headers=headers,
+                   on_success=lambda req, res: self.on_groups_success(req, res, parent_layout, left_layout),
+                   on_redirect=lambda req, res: self.on_groups_redirect(req, res, parent_layout, left_layout))
+
+    def on_groups_redirect(self, request, result, parent_layout, left_layout):
+
+        redirect_url = request.resp_headers.get('location')  # Используйте 'location' в нижнем регистре
+        # print('URL для перенаправления:', redirect_url)
+
+        if redirect_url:
+            token = App.get_running_app().token
+            headers = {'Authorization': f'Bearer {token}'}
+            UrlRequest(redirect_url, req_headers=headers,
+                       on_success=lambda req, res: self.on_groups_success(req, res, parent_layout, left_layout),
+                       on_failure=self.on_groups_failure)
+        else:
+            print('Ошибка: Заголовок Location отсутствует в ответе.')
+
+    def on_groups_failure(self, request, result):
+        msg = result['detail']
+        message = f'Ошибка при загрузке данных по группам: {msg}'
+        notification_manager.show_popup_error(message)
+
+    def on_groups_success(self, request, result, parent_layout, left_layout):
+        parent_layout.clear_widgets()
+        left_layout.clear_widgets()
+        groups_name_layout = BoxLayout(orientation='vertical')
+        groups_name_layout.add_widget(Label(text='Вы учитесь в:'))
+
+        for group in result:
+            temp_text = group['name']
+            temp_id = group['id']
+            groups_button = Button(text=temp_text)
+            groups_button.bind(
+                on_press=partial(self.groupe_in, temp_id=temp_id, result=result, left_layout=left_layout,
+                                 parent_layout=parent_layout))
+            groups_name_layout.add_widget(groups_button)
+            groups_name_layout.add_widget(Widget())
+
+        groups_name_layout.add_widget(Widget())
+        left_layout.add_widget(groups_name_layout)
+
+    def groupe_in(self, instance, temp_id, result, left_layout, parent_layout):
+        left_layout.clear_widgets()
+        for group in result:
+            if group['id'] == temp_id:
+                name = group['name']
+                break
+        groups_name_layout = BoxLayout(orientation='vertical')
+
+        label1 = Label(text=name, text_size=(60, None),
+                       halign='center')
+
+        groups_name_layout.add_widget(label1)
+
+        chat_button = Button(text='Чат')
+        chat_button.bind(
+            on_press=self.open_chat)
+        groups_name_layout.add_widget(Widget())
+        groups_name_layout.add_widget(chat_button)
+
+        lection_button = Button(text='Лекции')
+        lection_button.bind(
+            on_press=self.open_lection)
+        groups_name_layout.add_widget(Widget())
+        groups_name_layout.add_widget(lection_button)
+
+        back_button = Button(text='Назад')
+        back_button.bind(
+            on_press=self.app.show_groups)
+        groups_name_layout.add_widget(Widget())
+        groups_name_layout.add_widget(back_button)
+
+        left_layout.add_widget(groups_name_layout)
+    def open_chat(self):
+        pass
+
+    def open_lection(self):
+
+        pass
 
 
 class MyApp(App):
@@ -517,28 +676,37 @@ class MyApp(App):
             }
 
     def build(self):
-        base_gridlayout = GridLayout(rows=2, spacing=3)
+        self.base_gridlayout = GridLayout(rows=2, spacing=3)
 
-        nav_gridlayout_onbase = GridLayout(cols=5, spacing=3, size_hint_y=0.10)
+        self.nav_gridlayout_onbase = GridLayout(cols=5, spacing=3, size_hint_y=0.10)
 
-        main_button = Button(text='Главная')
-        main_button.bind(on_press=self.show_main)
-        nav_gridlayout_onbase.add_widget(main_button)
+        self.main_button = Button(text='Главная')
+        self.main_button.bind(on_press=self.show_main)
+        self.nav_gridlayout_onbase.add_widget(self.main_button)
 
-        self.courses_instance = Courses()
-        courses_button = Button(text='Курсы')
-        courses_button.bind(on_press=self.show_courses)
-        nav_gridlayout_onbase.add_widget(courses_button)
+        self.courses_instance = Courses(app=self)
+        self.courses_button = Button(text='Курсы')
+        self.courses_button.bind(on_press=self.show_courses)
+        self.nav_gridlayout_onbase.add_widget(self.courses_button)
+        self.courses_button.opacity = 0
+        self.courses_button.disabled = True
 
-        nav_gridlayout_onbase.add_widget(Button(text='Группа'))
-        nav_gridlayout_onbase.add_widget(Widget())
+        self.group_instance = Groups(app=self)
+        self.group_button = Button(text='Группа')
+        self.group_button.bind(on_press=self.show_groups)
+        self.nav_gridlayout_onbase.add_widget(self.group_button)
+        self.group_button.opacity = 0
+        self.group_button.disabled = True
 
-        self.auth_instance = Auth()
-        auth_button = Button(text='Auth')
-        auth_button.bind(on_press=self.show_auth)
-        nav_gridlayout_onbase.add_widget(auth_button)
+        self.nav_gridlayout_onbase.add_widget(Widget())
+        # Создаем экземпляр Auth, передавая ссылку на текущий экземпляр MyApp
+        self.auth_instance = Auth(app=self)
 
-        mainpage_onbase = GridLayout(cols=2, spacing=3, size_hint_y=0.90)
+        self.auth_button = Button(text='Вход/Регист')
+        self.auth_button.bind(on_press=self.show_auth)
+        self.nav_gridlayout_onbase.add_widget(self.auth_button)
+
+        self.mainpage_onbase = GridLayout(cols=2, spacing=3, size_hint_y=0.90)
 
         left_nav_mainpage_onbase = GridLayout(rows=1, spacing=3, size_hint_x=0.20)
 
@@ -547,13 +715,13 @@ class MyApp(App):
         self.central_mainpage_onbase = central_mainpage_onbase
         self.left_nav_mainpage_onbase = left_nav_mainpage_onbase
 
-        mainpage_onbase.add_widget(left_nav_mainpage_onbase)
-        mainpage_onbase.add_widget(central_mainpage_onbase)
+        self.mainpage_onbase.add_widget(left_nav_mainpage_onbase)
+        self.mainpage_onbase.add_widget(central_mainpage_onbase)
 
-        base_gridlayout.add_widget(nav_gridlayout_onbase)
-        base_gridlayout.add_widget(mainpage_onbase)
+        self.base_gridlayout.add_widget(self.nav_gridlayout_onbase)
+        self.base_gridlayout.add_widget(self.mainpage_onbase)
 
-        return base_gridlayout
+        return self.base_gridlayout
 
     def show_auth(self, instance):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
@@ -565,7 +733,32 @@ class MyApp(App):
 
     def show_courses(self, instance):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
+        self.left_nav_mainpage_onbase.clear_widgets()
         self.courses_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
+
+    def show_groups(self, instance):
+        self.left_nav_mainpage_onbase.clear_widgets()
+        self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
+        self.group_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
+
+    def on_auth_success(self, instance):
+        # Вызывается после успешной авторизации
+        self.courses_button.opacity = 1
+        self.courses_button.disabled = False
+
+    def on_group_success(self, instance):
+        self.group_button.opacity = 1
+        self.group_button.disabled = False
+
+    def change_button_name(self, instance, name):
+        self.auth_button.text = name
+
+    def hide_button_on_logout(self, instance):
+        self.auth_button.text = 'Вход/Регист'
+        self.group_button.opacity = 0
+        self.group_button.disabled = True
+        self.group_button.opacity = 0
+        self.group_button.disabled = True
 
 
 def on_start(self):
