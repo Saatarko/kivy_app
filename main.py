@@ -8,6 +8,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.network.urlrequest import UrlRequest
 from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.label import Label
@@ -342,7 +343,7 @@ class Auth(GridLayout):
             return type
 
     def on_check_profile_failure(self, request, result):
-        msg = result['detail'][0]['msg']
+        msg = result['detail']
         message = f'Ошибка: {msg}'
         notification_manager.show_popup_error(message)
 
@@ -644,14 +645,17 @@ class Groups(GridLayout):
 
         chat_button = Button(text='Чат')
         chat_button.bind(
-            on_press=self.open_chat)
+            on_press=partial(self.open_chat, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
+                             left_layout=left_layout,
+                             parent_layout=parent_layout))
         groups_name_layout.add_widget(Widget())
         groups_name_layout.add_widget(chat_button)
 
         lection_button = Button(text='Лекции')
         lection_button.bind(
-            on_press= partial(self.open_lection, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val, left_layout=left_layout,
-                           parent_layout=parent_layout))
+            on_press=partial(self.open_lection, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
+                             left_layout=left_layout,
+                             parent_layout=parent_layout))
         groups_name_layout.add_widget(Widget())
         groups_name_layout.add_widget(lection_button)
 
@@ -662,8 +666,103 @@ class Groups(GridLayout):
         groups_name_layout.add_widget(back_button)
 
         left_layout.add_widget(groups_name_layout)
-    def open_chat(self):
+
+    def open_chat(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
+        left_layout.clear_widgets()
+
+        chat_layout = BoxLayout(orientation='vertical')
+        name = 'Введите сообщение'
+        label1 = Label(text=name, text_size=(60, None),
+                       halign='center')
+        chat_layout.add_widget(label1)
+        self.message_input = TextInput(multiline=True)
+        chat_layout.add_widget(self.message_input)
+        message_button = Button(text='Отправить')
+        message_button.bind(on_press=partial(self.add_message, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
+                                             left_layout=left_layout, parent_layout=parent_layout))
+        chat_layout.add_widget(message_button)
+        chat_layout.add_widget(Widget())
+
+        back_button2 = Button(text='Назад')
+        temp_id = temp_id_val
+        back_button2.bind(on_press=partial(self.stop_chat_update, temp_id=temp_id, result=temp_groupe_val,
+                                           left_layout=left_layout, parent_layout=parent_layout))
+        chat_layout.add_widget(back_button2)
+        left_layout.add_widget(chat_layout)
+
+        self.update_event = Clock.schedule_interval(
+            partial(self.open_chat_full, temp_id=temp_id, temp_id_val=temp_id_val,
+                    temp_groupe_val=temp_groupe_val, left_layout=left_layout,
+                    parent_layout=parent_layout), 5)
+
+    def open_chat_full(self, instance, temp_id, temp_id_val, temp_groupe_val, left_layout,
+                       parent_layout):
+
+        token = App.get_running_app().token
+        pk = temp_id_val
+        url = f'http://127.0.0.1:8000/chat/{pk}'
+        headers = {'Authorization': f'Bearer {token}'}
+
+        UrlRequest(url, req_headers=headers,
+                   on_success=lambda req, res: self.on_open_chat_success(req, res, temp_id_val, temp_groupe_val,
+                                                                         left_layout, parent_layout),
+                   on_failure=self.on_open_chat_failure)
+
+    def on_open_chat_failure(self, request, result):
+
         pass
+
+    def on_open_chat_success(self, request, result, temp_id_val, temp_groupe_val, left_layout, parent_layout):
+
+        parent_layout.clear_widgets()
+
+        chat_layout = BoxLayout(orientation='vertical')
+        chat_screen_layout = ScrollView(size_hint_y=0.8)
+
+        messages_container = BoxLayout(orientation='vertical', size_hint_y=None)
+        messages_container.bind(minimum_height=messages_container.setter('height'))
+
+        for chat in result:
+            temp_content = chat['content']
+            temp_user_id = chat['user_id']
+            temp_timestamp = chat['timestamp']
+
+            prefix = 'Сообщение от' + str(temp_user_id) + 'в ' + temp_timestamp
+
+            label_prefix = Label(text=prefix, size_hint_y=None, height=30)
+            label_message = Label(text=temp_content, size_hint_y=None, height=30)
+
+            messages_container.add_widget(label_prefix)
+            messages_container.add_widget(label_message)
+            messages_container.add_widget(Widget())
+
+        chat_screen_layout.add_widget(messages_container)
+
+        chat_layout.add_widget(chat_screen_layout)
+
+        parent_layout.add_widget(chat_layout)
+
+    def add_message(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
+
+        temp_message = self.message_input.text.strip()
+        self.message_input.text = ''
+        token = App.get_running_app().token
+
+        url = 'http://127.0.0.1:8000/chat/'
+        headers = {'Authorization': f'Bearer {token}'}
+
+        request_data = json.dumps({
+            'content': temp_message,
+            'groups_id': temp_id_val,
+
+        })
+
+        UrlRequest(url, method='POST', req_headers=headers, req_body=request_data)
+
+    def stop_chat_update(self, instance, temp_id, result, left_layout, parent_layout):
+        if hasattr(self, 'update_event'):
+            Clock.unschedule(self.update_event)
+        self.groupe_in(instance, temp_id=temp_id, result=result, left_layout=left_layout, parent_layout=parent_layout)
 
     def open_lection(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
 
@@ -678,8 +777,8 @@ class Groups(GridLayout):
         })
 
         UrlRequest(url, method='POST', req_headers=headers, req_body=request_data,
-                   on_success= lambda req, res: self.on_open_lection_success(req, res, temp_groupe_val, temp_id_val,
-                                                                             left_layout, parent_layout),
+                   on_success=lambda req, res: self.on_open_lection_success(req, res, temp_groupe_val, temp_id_val,
+                                                                            left_layout, parent_layout),
                    on_failure=self.on_open_lection_failure)
 
     def on_open_lection_failure(self, request, result):
@@ -706,12 +805,12 @@ class Groups(GridLayout):
         back_button2 = Button(text='Назад')
         temp_id = temp_id_val
         back_button2.bind(
-            on_press=partial(self.groupe_in, temp_id=temp_id, result=temp_groupe_val, left_layout=left_layout, parent_layout=parent_layout))
+            on_press=partial(self.groupe_in, temp_id=temp_id, result=temp_groupe_val, left_layout=left_layout,
+                             parent_layout=parent_layout))
         groups_name_layout.add_widget(Widget())
         groups_name_layout.add_widget(back_button2)
 
         left_layout.add_widget(groups_name_layout)
-
 
     def lesson_description(self, instance, temp_id, result, left_layout, parent_layout):
 
@@ -735,6 +834,7 @@ class Groups(GridLayout):
         courses_description_layout.add_widget(Widget())
 
         parent_layout.add_widget(courses_description_layout)
+
 
 class MyApp(App):
     token = None
