@@ -1,0 +1,29 @@
+    def on_open_chat_success(self, request, result, temp_id_val, temp_groupe_val, left_layout, parent_layout):
+
+        parent_layout.clear_widgets()
+
+        chat_layout = BoxLayout(orientation='vertical')
+        chat_screen_layout = ScrollView(size_hint_y=0.8)
+
+        messages_container = BoxLayout(orientation='vertical', size_hint_y=None)
+        messages_container.bind(minimum_height=messages_container.setter('height'))
+
+        for chat in result:
+            temp_content = chat['content']
+            temp_user_id = chat['user']['email']
+            temp_timestamp = chat['timestamp']
+
+            prefix = 'Сообщение от ' + str(temp_user_id) + 'в ' + temp_timestamp
+
+            label_prefix = Label(text=prefix, size_hint_y=None, height=30, font_size=12, color=(1, 1, 0, 1))
+            label_message = Label(text=temp_content, size_hint_y=None, height=30, font_size=16)
+
+            messages_container.add_widget(label_prefix)
+            messages_container.add_widget(label_message)
+            messages_container.add_widget(Widget())
+
+        chat_screen_layout.add_widget(messages_container)
+
+        chat_layout.add_widget(chat_screen_layout)
+
+        parent_layout.add_widget(chat_layout)
