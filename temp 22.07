@@ -236,6 +236,7 @@ class Auth(GridLayout):
             'username': username,
             'password': password
         })
+        self.app.current_user_email = username
         headers = {'Content-type': 'application/x-www-form-urlencoded'}
         parent_layout.clear_widgets()
         UrlRequest(login_url, req_body=request_data, req_headers=headers,
@@ -318,6 +319,7 @@ class Auth(GridLayout):
         else:
             App.get_running_app().token = None
             App.get_running_app().token_check = None
+            self.app.hide_button_on_logout(None)  # убираем кнпоки при выходе
             self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
 
     # def check_token(self, parent_layout):
@@ -434,7 +436,7 @@ class Courses(GridLayout):
         else:
             App.get_running_app().token = None
             App.get_running_app().token_check = None
-
+            self.app.hide_button_on_logout(None)  # убираем кнпоки при выходе
             message = 'Для просмотра курсов войдите в систему. Если не зарегистрированы- зарегистрируйтесь!'
             notification_manager.show_popup_error(message)
 
@@ -565,6 +567,7 @@ class Groups(GridLayout):
     def __init__(self, app, **kwargs):
         super(Groups, self).__init__(**kwargs)
         self.app = app
+        self.update_event = None
 
     def check_token(self, parent_layout, left_layout):
         parent_layout.clear_widgets()
@@ -667,34 +670,62 @@ class Groups(GridLayout):
 
         left_layout.add_widget(groups_name_layout)
 
+    def start_chat_updates(self, instance, temp_id, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout):
+        def update_chat(*args):
+            self.open_chat_full(instance, temp_id, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout)
+
+        # Останавливаем предыдущую задачу, если она была
+        if self.update_event:
+            Clock.unschedule(self.update_event)
+
+        # Запускаем новую задачу
+        self.update_event = Clock.schedule_interval(update_chat, 4)
+
+    def stop_chat_update(self, go_back=False, temp_id=None, result=None, left_layout=None, parent_layout=None):
+        if self.update_event:
+            Clock.unschedule(self.update_event)
+            self.update_event = None
+
+        # Если требуется вернуться в предыдущее меню
+        if go_back:
+            self.groupe_in(instance=None, temp_id=temp_id, result=result, left_layout=left_layout,
+                           parent_layout=parent_layout)
+
     def open_chat(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
         left_layout.clear_widgets()
 
         chat_layout = BoxLayout(orientation='vertical')
-        name = 'Введите сообщение'
-        label1 = Label(text=name, text_size=(60, None),
-                       halign='center')
-        chat_layout.add_widget(label1)
-        self.message_input = TextInput(multiline=True)
-        chat_layout.add_widget(self.message_input)
-        message_button = Button(text='Отправить')
-        message_button.bind(on_press=partial(self.add_message, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
-                                             left_layout=left_layout, parent_layout=parent_layout))
-        chat_layout.add_widget(message_button)
         chat_layout.add_widget(Widget())
 
         back_button2 = Button(text='Назад')
-        temp_id = temp_id_val
-        back_button2.bind(
-            on_press=partial(self.groupe_in, temp_id=temp_id, result=temp_groupe_val, left_layout=left_layout,
-                             parent_layout=parent_layout))
+        back_button2.bind(on_press=lambda x: self.stop_chat_update(go_back=True, temp_id=temp_id_val,
+                                                                   result=temp_groupe_val, left_layout=left_layout,
+                                                                   parent_layout=parent_layout))
         chat_layout.add_widget(back_button2)
         left_layout.add_widget(chat_layout)
 
-        self.open_chat_full(temp_id=temp_id, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
-                            left_layout=left_layout, parent_layout=parent_layout)
+        chat_main_layout = GridLayout(rows=2, spacing=3)
 
-    def open_chat_full(self, temp_id, temp_id_val, temp_groupe_val, left_layout,
+        chat_text_layout = BoxLayout(orientation='vertical', size_hint_y=0.70)
+        chat_input_layout = BoxLayout(orientation='vertical', size_hint_y=0.30)
+
+
+        self.message_input = TextInput(multiline=True)
+        chat_input_layout.add_widget(self.message_input)
+        message_button = Button(text='Отправить сообщение')
+        message_button.bind(on_press=partial(self.add_message, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
+                                             left_layout=left_layout, parent_layout=parent_layout))
+        chat_input_layout.add_widget(message_button)
+
+        chat_main_layout.add_widget(chat_text_layout)
+        chat_main_layout.add_widget(chat_input_layout)
+
+        parent_layout.add_widget(chat_main_layout)
+
+        # Запускаем обновления чата
+        self.start_chat_updates(instance, temp_id_val, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout)
+
+    def open_chat_full(self, instance, temp_id, temp_id_val, temp_groupe_val, chat_text_layout,
                        parent_layout):
 
         token = App.get_running_app().token
@@ -704,16 +735,20 @@ class Groups(GridLayout):
 
         UrlRequest(url, req_headers=headers,
                    on_success=lambda req, res: self.on_open_chat_success(req, res, temp_id_val, temp_groupe_val,
-                                                                         left_layout, parent_layout),
-                   on_failure=self.on_open_chat_failure)
+                                                                         chat_text_layout, parent_layout),
+                   on_failure=lambda req, res: self.on_open_chat_failure(req, res, temp_id_val, temp_groupe_val,
+                                                                         chat_text_layout, parent_layout))
 
-    def on_open_chat_failure(self, request, result):
+    def on_open_chat_failure(self, request, result, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout):
+        # Пустой result для случая, когда нет сообщений
+        self.on_open_chat_success(request=request, result=None, temp_id_val=temp_id_val,
+                                  temp_groupe_val=temp_groupe_val, chat_text_layout=chat_text_layout,
+                                  parent_layout=parent_layout)
 
-        pass
+    def on_open_chat_success(self, request, result, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout):
+        # parent_layout.clear_widgets()
 
-    def on_open_chat_success(self, request, result, temp_id_val, temp_groupe_val, left_layout, parent_layout):
-
-        parent_layout.clear_widgets()
+        chat_text_layout.clear_widgets()
 
         chat_layout = BoxLayout(orientation='vertical')
         chat_screen_layout = ScrollView(size_hint_y=0.8)
@@ -721,29 +756,82 @@ class Groups(GridLayout):
         messages_container = BoxLayout(orientation='vertical', size_hint_y=None)
         messages_container.bind(minimum_height=messages_container.setter('height'))
 
-        for chat in result:
-            temp_content = chat['content']
-            temp_user_id = chat['user_id']
-            temp_timestamp = chat['timestamp']
+        if result:
+            for chat in result:
+                temp_content = chat['content']
+                temp_user_id = chat['user']['email']
+                temp_timestamp = chat['timestamp']
 
-            prefix = 'Сообщение от' + str(temp_user_id) + 'в ' + temp_timestamp
+                prefix = 'Сообщение от ' + str(temp_user_id) + ' в ' + temp_timestamp
 
-            label_prefix = Label(text=prefix, size_hint_y=None, height=30)
-            label_message = Label(text=temp_content, size_hint_y=None, height=30)
+                # Определяем, слева или справа будет сообщение
+                if temp_user_id == self.app.current_user_email:
+                    halign = 'left'
+                else:
+                    halign = 'right'
 
-            messages_container.add_widget(label_prefix)
-            messages_container.add_widget(label_message)
-            messages_container.add_widget(Widget())
+                label_prefix = Label(
+                    text=prefix,
+                    size_hint_y=None,
+                    height=20,  # Высота уменьшена для меньшего шрифта
+                    font_size=10,  # Меньший размер шрифта для prefix
+                    color=(1, 1, 0, 1),
+                    halign=halign,
+                    valign='top'
+                )
+                label_prefix.bind(size=label_prefix.setter('text_size'))
+
+                label_message = Label(
+                    text=temp_content,
+                    size_hint_y=None,
+                    height=30,
+                    font_size=16,
+                    halign=halign,
+                    valign='middle'
+                )
+                label_message.bind(size=label_message.setter('text_size'))
+
+                # Создаем вертикальный BoxLayout для выравнивания
+                message_box = BoxLayout(orientation='vertical', size_hint_y=None, height=50, padding=5)
+                message_box.add_widget(label_prefix)
+                message_box.add_widget(label_message)
+
+                # Создаем горизонтальный BoxLayout для выравнивания слева или справа
+                alignment_box = BoxLayout(size_hint_y=None, height=50, padding=5)
+                if halign == 'left':
+                    alignment_box.add_widget(message_box)
+                    alignment_box.add_widget(Widget())
+                else:
+                    alignment_box.add_widget(Widget())
+                    alignment_box.add_widget(message_box)
+
+                messages_container.add_widget(alignment_box)
+        else:
+            # Добавляем сообщение о том, что чат пуст
+            empty_label = Label(
+                text="Чат пока пуст. Будьте первым, кто отправит сообщение!",
+                size_hint_y=None,
+                height=30,
+                font_size=16,
+                halign='center',
+                valign='middle'
+            )
+            empty_label.bind(size=empty_label.setter('text_size'))
+            messages_container.add_widget(empty_label)
 
         chat_screen_layout.add_widget(messages_container)
-
         chat_layout.add_widget(chat_screen_layout)
+        chat_text_layout.add_widget(chat_layout)
+        self.scroll_to_bottom(chat_screen_layout)
 
-        parent_layout.add_widget(chat_layout)
+    def scroll_to_bottom(self, scroll_view):
+        scroll_view.scroll_y = 0
+
 
     def add_message(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
 
         temp_message = self.message_input.text.strip()
+        self.message_input.text = ''
         token = App.get_running_app().token
 
         url = 'http://127.0.0.1:8000/chat/'
@@ -756,6 +844,7 @@ class Groups(GridLayout):
         })
 
         UrlRequest(url, method='POST', req_headers=headers, req_body=request_data)
+
 
     def open_lection(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
 
@@ -838,6 +927,8 @@ class MyApp(App):
             'age': 0,
             }
 
+    current_user_email = 'user1@example.com'  # Email текущего пользователя
+
     def build(self):
         self.base_gridlayout = GridLayout(rows=2, spacing=3)
 
@@ -889,6 +980,8 @@ class MyApp(App):
     def show_auth(self, instance):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.auth_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
+        if self.group_instance:
+            self.group_instance.stop_chat_update()  # Остановка обновлений
 
     def show_main(self, instance):
         self.central_mainpage_onbase.clear_widgets()
@@ -898,11 +991,15 @@ class MyApp(App):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.left_nav_mainpage_onbase.clear_widgets()
         self.courses_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
+        if self.group_instance:
+            self.group_instance.stop_chat_update()  # Остановка обновлений
 
     def show_groups(self, instance):
         self.left_nav_mainpage_onbase.clear_widgets()
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.group_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
+        if self.group_instance:
+            self.group_instance.stop_chat_update()  # Остановка обновлений
 
     def on_auth_success(self, instance):
         # Вызывается после успешной авторизации
@@ -930,6 +1027,8 @@ def on_start(self):
     # Инициализация словаря для проверки токена
     self.token_check = {'access_token': 'your_token', 'token_type': 'your_type',
                         'expiry': datetime.now() + timedelta(seconds=3600)}
+
+    # self.current_user_email = current_user_email
 
 
 if __name__ == '__main__':

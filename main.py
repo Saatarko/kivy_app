@@ -132,7 +132,7 @@ class Auth(GridLayout):
     def update_people(self, instance, parent_layout, pk):
         token = App.get_running_app().token
         if token:
-            user_url = f'http://127.0.0.1:8000/people/update/{pk}'
+            user_url = f'https://fastapi-1dyl.onrender.com/people/update/{pk}'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
 
             first_name = self.firstname_input.text.strip()
@@ -161,7 +161,7 @@ class Auth(GridLayout):
 
         token = App.get_running_app().token
         if token:
-            create_people_url = 'http://127.0.0.1:8000/people/'
+            create_people_url = 'https://fastapi-1dyl.onrender.com/people/'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
 
             first_name = self.firstname_input.text.strip()
@@ -231,7 +231,7 @@ class Auth(GridLayout):
     def login(self, instance, parent_layout):
         username = self.username_input.text.strip()
         password = self.password_input.text.strip()
-        login_url = 'http://127.0.0.1:8000/api/v1/auth/login'
+        login_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/login'
         request_data = urlencode({
             'username': username,
             'password': password
@@ -265,7 +265,7 @@ class Auth(GridLayout):
 
         token = App.get_running_app().token
         if token:
-            profile_url = f'http://127.0.0.1:8000/people/check'
+            profile_url = f'https://fastapi-1dyl.onrender.com/people/check'
             headers = {'Authorization': f'Bearer {token}'}
             # Добавляем параметр on_redirect для обработки перенаправлений
             UrlRequest(profile_url, req_headers=headers,
@@ -287,7 +287,7 @@ class Auth(GridLayout):
         # Получаем текущий токен
         token = App.get_running_app().token
         if token:
-            logout_url = 'http://127.0.0.1:8000/api/v1/auth/logout'
+            logout_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/logout'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
 
             parent_layout.clear_widgets()
@@ -319,6 +319,7 @@ class Auth(GridLayout):
         else:
             App.get_running_app().token = None
             App.get_running_app().token_check = None
+            self.app.hide_button_on_logout(None)  # убираем кнпоки при выходе
             self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
 
     # def check_token(self, parent_layout):
@@ -335,7 +336,7 @@ class Auth(GridLayout):
         if isinstance(type, str):
             token = App.get_running_app().token
             if token:
-                user_url = 'http://127.0.0.1:8000/api/v1/auth/me'
+                user_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/me'
                 headers = {'Authorization': f'Bearer {token}'}
                 UrlRequest(user_url, req_headers=headers,
                            on_success=lambda req, res: self.on_check_profile_success(req, res, callback),
@@ -352,7 +353,7 @@ class Auth(GridLayout):
         pk = result['id']
         token = App.get_running_app().token
         if token:
-            profile_url = f'http://127.0.0.1:8000/people/{pk}'
+            profile_url = f'https://fastapi-1dyl.onrender.com/people/{pk}'
             headers = {'Authorization': f'Bearer {token}'}
             # Добавляем параметр on_redirect для обработки перенаправлений
             UrlRequest(profile_url, req_headers=headers,
@@ -385,7 +386,7 @@ class Auth(GridLayout):
         password = self.reg_password_input.text.strip()
         password2 = self.reg_password_input2.text.strip()
         if password == password2:
-            reg_url = 'http://127.0.0.1:8000/api/v1/auth/register'
+            reg_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/register'
             request_data = json.dumps({
                 'email': email,
                 'password': password,
@@ -408,7 +409,7 @@ class Auth(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_reg_success(self, request, result, password):
-        login_url = 'http://127.0.0.1:8000/api/v1/auth/login'
+        login_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/login'
         request_data = urlencode({
             'username': result['email'],
             'password': password
@@ -435,7 +436,7 @@ class Courses(GridLayout):
         else:
             App.get_running_app().token = None
             App.get_running_app().token_check = None
-
+            self.app.hide_button_on_logout(None)  # убираем кнпоки при выходе
             message = 'Для просмотра курсов войдите в систему. Если не зарегистрированы- зарегистрируйтесь!'
             notification_manager.show_popup_error(message)
 
@@ -443,7 +444,7 @@ class Courses(GridLayout):
 
         token = App.get_running_app().token
 
-        courses_url = 'http://127.0.0.1:8000/courses'
+        courses_url = 'https://fastapi-1dyl.onrender.com/courses'
         headers = {'Authorization': f'Bearer {token}'}
         # Добавляем параметр on_redirect для обработки перенаправлений
         UrlRequest(courses_url, req_headers=headers,
@@ -520,7 +521,7 @@ class Courses(GridLayout):
 
         token = App.get_running_app().token
         if token:
-            profile_url = f'http://127.0.0.1:8000/peoplecoursesassociation/{true_id}'
+            profile_url = f'https://fastapi-1dyl.onrender.com/peoplecoursesassociation/{true_id}'
             headers = {'Authorization': f'Bearer {token}'}
             courses_id = true_id
             request_data = json.dumps({
@@ -541,7 +542,7 @@ class Courses(GridLayout):
         notification_manager.show_popup_order_courses()
         token = App.get_running_app().token
         if token:
-            url = f'http://127.0.0.1:8000/peoplegroupesassociation/'
+            url = f'https://fastapi-1dyl.onrender.com/peoplegroupesassociation/'
             headers = {'Authorization': f'Bearer {token}'}
 
             request_data = json.dumps({
@@ -584,7 +585,7 @@ class Groups(GridLayout):
 
         token = App.get_running_app().token
 
-        url = 'http://127.0.0.1:8000/peoplegroupesassociation/check'
+        url = 'https://fastapi-1dyl.onrender.com/peoplegroupesassociation/check'
         headers = {'Authorization': f'Bearer {token}'}
         # Добавляем параметр on_redirect для обработки перенаправлений
         UrlRequest(url, req_headers=headers,
@@ -729,7 +730,7 @@ class Groups(GridLayout):
 
         token = App.get_running_app().token
         pk = temp_id_val
-        url = f'http://127.0.0.1:8000/chat/{pk}'
+        url = f'https://fastapi-1dyl.onrender.com/chat/{pk}'
         headers = {'Authorization': f'Bearer {token}'}
 
         UrlRequest(url, req_headers=headers,
@@ -833,7 +834,7 @@ class Groups(GridLayout):
         self.message_input.text = ''
         token = App.get_running_app().token
 
-        url = 'http://127.0.0.1:8000/chat/'
+        url = 'https://fastapi-1dyl.onrender.com/chat/'
         headers = {'Authorization': f'Bearer {token}'}
 
         request_data = json.dumps({
@@ -850,7 +851,7 @@ class Groups(GridLayout):
         left_layout.clear_widgets()
         token = App.get_running_app().token
 
-        url = 'http://127.0.0.1:8000/lessons/list'
+        url = 'https://fastapi-1dyl.onrender.com/lessons/list'
         headers = {'Authorization': f'Bearer {token}'}
 
         request_data = json.dumps({
