@@ -3,6 +3,8 @@ import time
 from typing import Any
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
+
+import requests
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.storage.jsonstore import JsonStore
@@ -22,7 +24,8 @@ from functools import partial
 import asyncio
 import websockets
 import threading
-
+import asynckivy
+import httpx
 
 class NotificationManager:
     def __init__(self):
@@ -585,34 +588,140 @@ class Groups(GridLayout):
         self.websocket = None
         self.chat_id = None
         self.chat_text_layout = None
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self.start_event_loop, args=(self.loop,))
+        self.thread.start()
+
+    def start_event_loop(self, loop):
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    async def load_chat_history(self, temp_id_val):
+        print('Мы в истории')
+
+        token = App.get_running_app().token
+        url = f'http://127.0.0.1:8000/chat/{temp_id_val}'
+        headers = {'Authorization': f'Bearer {token}'}
 
         try:
-            self.loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-        print("Event loop initialized")
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                history = response.json()
+
+                print(history)
+
+                for message in history:
+                    try:
+                        content = message.get("content", "No content")
+                        user = message.get("user", {})
+                        email = user.get("email", "No email")
+                        timestamp = message.get("timestamp", "No timestamp")
+
+                        # print(content)
+                        # print(email)
+                        # print(timestamp)
+
+                        data = {
+                            "message": content,
+                            "email": email,
+                            "time": timestamp
+                        }
+                        # print(data)
+                        # print(f"Expected dictionary, got {type(data)}")
+                        Clock.schedule_once(partial(self.update_chat_display, data))
+                    except KeyError as e:
+                        print(f"Missing key in message: {e}")
+                    except Exception as e:
+                        print(f"Error processing message: {e}")
+        except httpx.RequestError as e:
+            print(f"Failed to load chat history: {e}")
 
     async def websocket_connect(self, chat_text_layout):
         uri = f"ws://127.0.0.1:8000/chat/{self.chat_id}"
 
         token = App.get_running_app().token
         headers = {'Authorization': f'Bearer {token}'}
-
         print(f"Connecting to WebSocket: {uri}")
-        async with websockets.connect(uri, extra_headers=headers) as websocket:
-            self.websocket = websocket
-            self.chat_text_layout = chat_text_layout
-            print("WebSocket connection established")
-            while True:
-                message = await websocket.recv()
-                print(f"Received message: {message}")
-                Clock.schedule_once(lambda dt: self.update_chat_display(message))
+        try:
+            async with websockets.connect(uri, extra_headers=headers) as websocket:
+                self.websocket = websocket
+                self.chat_text_layout = chat_text_layout
+                print("WebSocket connection established")
+                while True:
+                    message = await websocket.recv()
+                    print(f"Received message: {message}")
+                    # Clock.schedule_once(lambda dt: self.update_chat_display(message))
+                    try:
+                        data = json.loads(message)
+                        Clock.schedule_once(lambda dt: self.update_chat_display(data, dt))
+                    except json.JSONDecodeError as e:
+                        print(f"JSON decode error: {e}")
+        except Exception as e:
+            print(f"WebSocket connection error: {e}")
 
-    def update_chat_display(self, message):
+    def update_chat_display(self, data, dt):
         if self.chat_text_layout is not None:
-            self.chat_text_layout.add_widget(Label(text=message))
+            content = data.get('message', 'No message')
+            email = data.get('email', 'No email')
+            timestamp = data.get('time', 'No time')
 
+            prefix = 'Сообщение от ' + str(email) + ' в ' + str(timestamp)
+
+            # Выравнивание сообщения
+            halign = 'left' if email == self.app.current_user_email else 'right'
+
+            # Используем BoxLayout для управления отступами
+            prefix_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=20, padding=(10, 0, 10, 0))
+
+            message_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=30, padding=(10, 0, 10, 0))
+
+            if halign == 'left':
+                # Добавляем текст сообщения с выравниванием влево
+                prefix_layout.add_widget(Label(
+                    text=prefix,
+                    size_hint_x=None,
+                    width=self.width * 0.8,
+                    font_size=10,
+                    color=(1, 1, 0, 1),
+                    halign='left',
+                    valign='top'
+                ))
+                message_layout.add_widget(Label(
+                    text=content,
+                    size_hint_x=None,
+                    width=self.width * 0.8,
+                    font_size=16,
+                    halign='left',
+                    valign='middle'
+                ))
+            else:
+                # Добавляем отступ для правого выравнивания
+                prefix_layout.add_widget(Widget(size_hint_x=None, width=self.width * 0.2))
+                prefix_layout.add_widget(Label(
+                    text=prefix,
+                    size_hint_x=None,
+                    width=self.width * 0.8,
+                    font_size=10,
+                    color=(1, 1, 0, 1),
+                    halign='right',
+                    valign='top'
+                ))
+                message_layout.add_widget(Widget(size_hint_x=None, width=self.width * 0.2))
+                message_layout.add_widget(Label(
+                    text=content,
+                    size_hint_x=None,
+                    width=self.width * 0.8,
+                    font_size=16,
+                    halign='right',
+                    valign='middle'
+                ))
+
+            self.chat_text_layout.add_widget(prefix_layout)
+            self.chat_text_layout.add_widget(message_layout)
+
+            # Автоматическая прокрутка вниз
+            self.scroll_view.scroll_to(self.chat_text_layout)
 
     def check_token(self, parent_layout, left_layout):
         parent_layout.clear_widgets()
@@ -633,7 +742,7 @@ class Groups(GridLayout):
         url = 'http://127.0.0.1:8000/peoplegroupesassociation/check'
         headers = {'Authorization': f'Bearer {token}'}
         # Добавляем параметр on_redirect для обработки перенаправлений
-        UrlRequest(url, req_headers=headers,on_failure=self.on_groups_failure,
+        UrlRequest(url, req_headers=headers, on_failure=self.on_groups_failure,
                    on_success=lambda req, res: self.on_groups_success(req, res, parent_layout, left_layout),
                    on_redirect=lambda req, res: self.on_groups_redirect(req, res, parent_layout, left_layout))
 
@@ -730,8 +839,13 @@ class Groups(GridLayout):
 
         chat_main_layout = GridLayout(rows=2, spacing=3)
 
-        chat_text_layout = BoxLayout(orientation='vertical', size_hint_y=0.70)
-        chat_input_layout = BoxLayout(orientation='vertical', size_hint_y=0.30)
+        chat_text_layout = BoxLayout(orientation='vertical', size_hint_y=None)
+        chat_text_layout.bind(minimum_height=chat_text_layout.setter('height'))
+
+        self.scroll_view = ScrollView(size_hint=(1, 0.8))
+        self.scroll_view.add_widget(chat_text_layout)
+
+        chat_input_layout = BoxLayout(orientation='vertical', size_hint_y=0.2)
 
         self.message_input = TextInput(multiline=True)
         chat_input_layout.add_widget(self.message_input)
@@ -740,45 +854,48 @@ class Groups(GridLayout):
                                              left_layout=left_layout, parent_layout=parent_layout))
         chat_input_layout.add_widget(message_button)
 
-        chat_main_layout.add_widget(chat_text_layout)
+        chat_main_layout.add_widget(self.scroll_view)
         chat_main_layout.add_widget(chat_input_layout)
 
         parent_layout.add_widget(chat_main_layout)
 
-        # Запускаем асинхронное обновление чата через WebSocket
-        self.chat_id = temp_id_val
-        print(f"Opening chat with id: {self.chat_id}")
-        Clock.schedule_once(lambda dt: self.start_websocket_connection(chat_text_layout))
 
-    def start_websocket_connection(self, chat_text_layout):
-        asyncio.ensure_future(self.websocket_connect(chat_text_layout))
+        # Сначала загружаем историю сообщений
+
+        self.chat_id = temp_id_val
+        print(f"Открытие чата с id: {self.chat_id}")
+        asyncio.run_coroutine_threadsafe(self.load_chat_history(temp_id_val), self.loop)
+
+        # Запускаем асинхронное обновление чата через WebSocket
+        asyncio.run_coroutine_threadsafe(self.websocket_connect(chat_text_layout), self.loop)
         print("WebSocket connect task created")
 
-    def stop_chat_update(self, go_back=False, temp_id=None, result=None, left_layout=None, parent_layout=None):
+    def stop_chat_update(self, go_back, temp_id, result, left_layout, parent_layout):
         if self.websocket:
-            asyncio.run_coroutine_threadsafe(self.websocket.close(), asyncio.get_event_loop())
+            asyncio.run_coroutine_threadsafe(self.websocket.close(), self.loop)
             self.websocket = None
-
-        # Если требуется вернуться в предыдущее меню
         if go_back:
-            self.groupe_in(instance=None, temp_id=temp_id, result=result, left_layout=left_layout,
-                           parent_layout=parent_layout)
+            self.app.show_groups(None)
 
     def add_message(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
         temp_message = self.message_input.text.strip()
         self.message_input.text = ''
-        token = App.get_running_app().token
 
-        url = 'http://127.0.0.1:8000/chat/'
-        headers = {'Authorization': f'Bearer {token}'}
+        if self.websocket:
+            asyncio.run_coroutine_threadsafe(self.send_message(temp_message), self.loop)
 
-        request_data = json.dumps({
-            'content': temp_message,
-            'groups_id': temp_id_val,
-        })
+    async def send_message(self, message):
+        if self.websocket:
+            # Форматируем сообщение в JSON, добавляя токен
+            token = App.get_running_app().token
+            formatted_message = json.dumps({
+                "message": message,
+                "token": token
+            })
+            await self.websocket.send(formatted_message)
 
-        UrlRequest(url, method='POST', req_headers=headers, req_body=request_data)
-
+    def on_start(self):
+        asyncio.ensure_future(self.connect_websocket())
 
     def open_lection(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
 
@@ -916,7 +1033,6 @@ class MyApp(App):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.auth_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
 
-
     def show_main(self, instance):
         self.central_mainpage_onbase.clear_widgets()
         self.left_nav_mainpage_onbase.clear_widgets()
@@ -930,7 +1046,6 @@ class MyApp(App):
         self.left_nav_mainpage_onbase.clear_widgets()
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.group_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
-
 
     def on_auth_success(self, instance):
         # Вызывается после успешной авторизации

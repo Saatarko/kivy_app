@@ -10,6 +10,8 @@ python = "^3.10"
 Kivy = "^2.3.0"
 websockets = "^12.0"
 asyncio = "^3.4.3"
+asynckivy = "^0.6.3"
+httpx = "^0.27.0"
 
 
 [build-system]
