@@ -667,48 +667,64 @@ class Groups(GridLayout):
 
             prefix = 'Сообщение от ' + str(email) + ' в ' + str(timestamp)
 
-            # Определяем, слева или справа будет сообщение
-            if email == self.app.current_user_email:
-                halign = 'left'
-            else:
-                halign = 'right'
+            # Выравнивание сообщения
+            halign = 'left' if email == self.app.current_user_email else 'right'
 
-            label_prefix = Label(
-                text=prefix,
-                size_hint_y=None,
-                height=20,
-                font_size=10,
-                color=(1, 1, 0, 1),
-                halign=halign,
-                valign='top'
-            )
-            label_prefix.bind(size=label_prefix.setter('text_size'))
+            # Используем BoxLayout для управления отступами
+            prefix_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=20, padding=(10, 0, 10, 0))
 
-            label_message = Label(
-                text=content,
-                size_hint_y=None,
-                height=30,
-                font_size=16,
-                halign=halign,
-                valign='middle'
-            )
-            label_message.bind(size=label_message.setter('text_size'))
+            message_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=30, padding=(10, 0, 10, 0))
 
-            # Создаем вертикальный BoxLayout для выравнивания
-            message_box = BoxLayout(orientation='vertical', size_hint_y=None, height=50, padding=5)
-            message_box.add_widget(label_prefix)
-            message_box.add_widget(label_message)
-
-            # Создаем горизонтальный BoxLayout для выравнивания слева или справа
-            alignment_box = BoxLayout(size_hint_y=None, height=50, padding=5)
             if halign == 'left':
-                alignment_box.add_widget(message_box)
-                alignment_box.add_widget(Widget())
-            else:
-                alignment_box.add_widget(Widget())
-                alignment_box.add_widget(message_box)
+                prefix_label = Label(
+                    text=prefix,
+                    size_hint_x=None,
+                    width=self.width - 20,  # задаем ширину равной ширине контейнера с учетом отступов
+                    font_size=10,
+                    color=(1, 1, 0, 1),
+                    halign='left',
+                    valign='top',
+                    text_size=(self.width - 20, None)  # задаем ширину текстового блока
+                )
+                prefix_layout.add_widget(prefix_label)
 
-            self.chat_text_layout.add_widget(alignment_box)
+                message_label = Label(
+                    text=content,
+                    size_hint_x=None,
+                    width=self.width - 20,
+                    font_size=16,
+                    halign='left',
+                    valign='middle',
+                    text_size=(self.width - 20, None)
+                )
+                message_layout.add_widget(message_label)
+            else:
+                # Добавляем отступ для правого выравнивания
+                prefix_label = Label(
+                    text=prefix,
+                    size_hint_x=None,
+                    width=self.width - 20,
+                    font_size=10,
+                    color=(1, 1, 0, 1),
+                    halign='right',
+                    valign='top',
+                    text_size=(self.width - 20, None)
+                )
+                prefix_layout.add_widget(prefix_label)
+
+                message_label = Label(
+                    text=content,
+                    size_hint_x=None,
+                    width=self.width - 20,
+                    font_size=16,
+                    halign='right',
+                    valign='middle',
+                    text_size=(self.width - 20, None)
+                )
+                message_layout.add_widget(message_label)
+
+            self.chat_text_layout.add_widget(prefix_layout)
+            self.chat_text_layout.add_widget(message_layout)
 
             # Автоматическая прокрутка вниз
             self.scroll_view.scroll_to(self.chat_text_layout)
@@ -852,6 +868,7 @@ class Groups(GridLayout):
         self.chat_text_layout = chat_text_layout  # добавьте это, чтобы сохранить ссылку на layout
 
         # Сначала загружаем историю сообщений
+
         self.chat_id = temp_id_val
         print(f"Открытие чата с id: {self.chat_id}")
         asyncio.run_coroutine_threadsafe(self.load_chat_history(temp_id_val), self.loop)
