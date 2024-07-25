@@ -1,7 +1,10 @@
 import json
+import time
 from typing import Any
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
+
+import requests
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.storage.jsonstore import JsonStore
@@ -17,6 +20,12 @@ from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem, TabbedPanelStrip
 from kivy.uix.widget import Widget
 from kivy.uix.popup import Popup
 from functools import partial
+
+import asyncio
+import websockets
+import threading
+import asynckivy
+import httpx
 
 
 class NotificationManager:
@@ -132,8 +141,9 @@ class Auth(GridLayout):
 
     def update_people(self, instance, parent_layout, pk):
         token = App.get_running_app().token
+
         if token:
-            user_url = f'https://fastapi-1dyl.onrender.com/people/update/{pk}'
+            user_url = f'http://127.0.0.1:8000/people/update/{pk}'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
 
             first_name = self.firstname_input.text.strip()
@@ -150,7 +160,10 @@ class Auth(GridLayout):
                        on_success=self.on_update_people_success, on_failure=self.on_update_people_failure)
 
     def on_update_people_success(self, request, result):
-        # Сохранение токена аутентификации и переход к экрану курсов
+
+        if self.app.store.exists('on_people'):
+            self.app.store.delete('on_people')
+
         notification_manager.show_popup_update_people()
 
     def on_update_people_failure(self, request, result):
@@ -162,7 +175,7 @@ class Auth(GridLayout):
 
         token = App.get_running_app().token
         if token:
-            create_people_url = 'https://fastapi-1dyl.onrender.com/people/'
+            create_people_url = 'http://127.0.0.1:8000/people/'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
 
             first_name = self.firstname_input.text.strip()
@@ -232,7 +245,7 @@ class Auth(GridLayout):
     def login(self, instance, parent_layout):
         username = self.username_input.text.strip()
         password = self.password_input.text.strip()
-        login_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/login'
+        login_url = 'http://127.0.0.1:8000/api/v1/auth/login'
         request_data = urlencode({
             'username': username,
             'password': password
@@ -266,7 +279,7 @@ class Auth(GridLayout):
 
         token = App.get_running_app().token
         if token:
-            profile_url = f'https://fastapi-1dyl.onrender.com/people/check'
+            profile_url = f'http://127.0.0.1:8000/people/check'
             headers = {'Authorization': f'Bearer {token}'}
             # Добавляем параметр on_redirect для обработки перенаправлений
             UrlRequest(profile_url, req_headers=headers,
@@ -288,7 +301,7 @@ class Auth(GridLayout):
         # Получаем текущий токен
         token = App.get_running_app().token
         if token:
-            logout_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/logout'
+            logout_url = 'http://127.0.0.1:8000/api/v1/auth/logout'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
 
             parent_layout.clear_widgets()
@@ -302,6 +315,7 @@ class Auth(GridLayout):
         App.get_running_app().token_check = None
 
         self.app.hide_button_on_logout(None)  # убираем кнпоки при выходе
+        self.app.store.clear()  # чистим кэш
 
         notification_manager.show_popup_success_logout()
         # Обновление вкладки аутентификации
@@ -333,11 +347,21 @@ class Auth(GridLayout):
     #         App.get_running_app().token_check = None
     #         self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
 
-    def check_profile(self, type, callback=None):  # callback заставляет асинхронщиу дожидаться ответа по функции
+    def check_profile(self, type, callback=None):
         if isinstance(type, str):
             token = App.get_running_app().token
             if token:
-                user_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/me'
+                # Проверка наличия кэшированных данных
+                if self.app.store.exists('check_profile'):
+                    cached_data = self.app.store.get('check_profile')
+                    # Проверка, что данные не устарели (менее 3000 секунд)
+                    if time.time() - cached_data['timestamp'] < 3000:
+                        self.on_check_profile_success(None, cached_data['result'], callback)
+                        return
+                    else:
+                        self.app.store.delete('check_profile')
+
+                user_url = 'http://127.0.0.1:8000/api/v1/auth/me'
                 headers = {'Authorization': f'Bearer {token}'}
                 UrlRequest(user_url, req_headers=headers,
                            on_success=lambda req, res: self.on_check_profile_success(req, res, callback),
@@ -351,12 +375,25 @@ class Auth(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_check_profile_success(self, request, result, callback=None):
+        # Сохранение результата в кэш
+        if not self.app.store.exists('check_profile'):
+            self.app.store.put('check_profile', result=result, timestamp=time.time())
         pk = result['id']
         token = App.get_running_app().token
         if token:
-            profile_url = f'https://fastapi-1dyl.onrender.com/people/{pk}'
+
+            if self.app.store.exists('on_people'):
+                cached_data = self.app.store.get('on_people')
+                # Проверка, что данные не устарели (менее 3000 секунд)
+                if time.time() - cached_data['timestamp'] < 3000:
+                    self.on_people_success(None, pk, cached_data['result'], callback)
+                    return
+                else:
+                    self.app.store.delete('on_people')
+
+            profile_url = f'http://127.0.0.1:8000/people/{pk}'
             headers = {'Authorization': f'Bearer {token}'}
-            # Добавляем параметр on_redirect для обработки перенаправлений
+            # Запрос данных профиля пользователя
             UrlRequest(profile_url, req_headers=headers,
                        on_success=lambda req, res: self.on_people_success(req, pk, res, callback),
                        on_failure=lambda req, res: self.on_people_failure(req, pk, res, callback))
@@ -365,6 +402,10 @@ class Auth(GridLayout):
                 callback(result)
 
     def on_people_success(self, request, pk, result, callback=None):
+
+        if not self.app.store.exists('on_people'):
+            self.app.store.put('on_people', result=result, timestamp=time.time())  # сохранение данных в Кеш
+
         data = {'first_name': result['first_name'],
                 'last_name': result['last_name'],
                 'age': result['age'],
@@ -387,19 +428,23 @@ class Auth(GridLayout):
         password = self.reg_password_input.text.strip()
         password2 = self.reg_password_input2.text.strip()
         if password == password2:
-            reg_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/register'
-            request_data = json.dumps({
-                'email': email,
-                'password': password,
-                'is_active': True,
-                'is_superuser': False,
-                'is_verified': False
-            })
-            headers = {'Content-type': 'application/json'}
-            parent_layout.clear_widgets()
-            UrlRequest(reg_url, req_body=request_data, req_headers=headers,
-                       on_success=lambda req, res: self.on_reg_success(req, res, password),
-                       on_failure=self.on_reg_failure)
+            if len(password) > 3:
+                reg_url = 'http://127.0.0.1:8000/api/v1/auth/register'
+                request_data = json.dumps({
+                    'email': email,
+                    'password': password,
+                    'is_active': True,
+                    'is_superuser': False,
+                    'is_verified': False
+                })
+                headers = {'Content-type': 'application/json'}
+                parent_layout.clear_widgets()
+                UrlRequest(reg_url, req_body=request_data, req_headers=headers,
+                           on_success=lambda req, res: self.on_reg_success(req, res, password),
+                           on_failure=self.on_reg_failure)
+            else:
+                message = 'пароль слишком короткий:'
+                notification_manager.show_popup_error(message)
         else:
             message = 'Введенные пароли не одинаковые:'
             notification_manager.show_popup_error(message)
@@ -410,7 +455,7 @@ class Auth(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_reg_success(self, request, result, password):
-        login_url = 'https://fastapi-1dyl.onrender.com/api/v1/auth/login'
+        login_url = 'http://127.0.0.1:8000/api/v1/auth/login'
         request_data = urlencode({
             'username': result['email'],
             'password': password
@@ -442,15 +487,22 @@ class Courses(GridLayout):
             notification_manager.show_popup_error(message)
 
     def check_courses(self, parent_layout, left_layout):
+        if self.app.store.exists('courses'):
+            cached_data = self.app.store.get('courses')
+            if time.time() - cached_data['timestamp'] < 3000:  # = 50 минут
+                self.on_courses_success(None, cached_data['result'], parent_layout, left_layout)
+                return
+            else:
+                self.app.store.delete('courses')
 
         token = App.get_running_app().token
-
-        courses_url = 'https://fastapi-1dyl.onrender.com/courses'
+        courses_url = 'http://127.0.0.1:8000/courses'
         headers = {'Authorization': f'Bearer {token}'}
-        # Добавляем параметр on_redirect для обработки перенаправлений
+
         UrlRequest(courses_url, req_headers=headers,
                    on_success=lambda req, res: self.on_courses_success(req, res, parent_layout, left_layout),
-                   on_redirect=lambda req, res: self.on_redirect(req, res, parent_layout, left_layout))
+                   on_redirect=lambda req, res: self.on_redirect(req, res, parent_layout, left_layout),
+                   on_failure=self.on_courses_failure)
 
     def on_redirect(self, request, result, parent_layout, left_layout):
         # # Логируем все заголовки ответа
@@ -474,6 +526,10 @@ class Courses(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_courses_success(self, request, result, parent_layout, left_layout):
+
+        if not self.app.store.exists('courses'):
+            self.app.store.put('courses', result=result, timestamp=time.time())
+
         parent_layout.clear_widgets()
         left_layout.clear_widgets()
         courses_name_layout = BoxLayout(orientation='vertical')
@@ -522,7 +578,7 @@ class Courses(GridLayout):
 
         token = App.get_running_app().token
         if token:
-            profile_url = f'https://fastapi-1dyl.onrender.com/peoplecoursesassociation/{true_id}'
+            profile_url = f'http://127.0.0.1:8000/peoplecoursesassociation/{true_id}'
             headers = {'Authorization': f'Bearer {token}'}
             courses_id = true_id
             request_data = json.dumps({
@@ -543,7 +599,7 @@ class Courses(GridLayout):
         notification_manager.show_popup_order_courses()
         token = App.get_running_app().token
         if token:
-            url = f'https://fastapi-1dyl.onrender.com/peoplegroupesassociation/'
+            url = f'http://127.0.0.1:8000/peoplegroupesassociation/'
             headers = {'Authorization': f'Bearer {token}'}
 
             request_data = json.dumps({
@@ -561,6 +617,10 @@ class Courses(GridLayout):
 
     def on_course_order_success_all(self, request, result):
         self.app.on_group_success(None)
+
+        if self.app.store.exists('check_groups'):  # очистка кэша списка групп при вступлении в новую группу
+            self.app.store.delete('check_groups')
+
         notification_manager.show_popup_order_courses_and_groups()
 
 
@@ -568,7 +628,133 @@ class Groups(GridLayout):
     def __init__(self, app, **kwargs):
         super(Groups, self).__init__(**kwargs)
         self.app = app
-        self.update_event = None
+        self.websocket = None
+        self.chat_id = None
+        self.chat_text_layout = None
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self.start_event_loop, args=(self.loop,))
+        self.thread.start()
+
+    def start_event_loop(self, loop):
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    async def load_chat_history(self, temp_id_val):
+
+        token = App.get_running_app().token
+        url = f'http://127.0.0.1:8000/chat/{temp_id_val}'
+        headers = {'Authorization': f'Bearer {token}'}
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                history = response.json()
+
+                print(history)
+
+                for message in history:
+                    try:
+                        content = message.get("content", "No content")
+                        user = message.get("user", {})
+                        email = user.get("email", "No email")
+                        timestamp = message.get("timestamp", "No timestamp")
+
+                        # print(content)
+                        # print(email)
+                        # print(timestamp)
+
+                        data = {
+                            "message": content,
+                            "email": email,
+                            "time": timestamp
+                        }
+                        # print(data)
+                        # print(f"Expected dictionary, got {type(data)}")
+                        Clock.schedule_once(partial(self.update_chat_display, data))
+                    except KeyError as e:
+                        print(f"Missing key in message: {e}")
+                    except Exception as e:
+                        print(f"Error processing message: {e}")
+        except httpx.RequestError as e:
+            print(f"Failed to load chat history: {e}")
+
+    async def websocket_connect(self, chat_text_layout):
+        uri = f"ws://127.0.0.1:8000/chat/{self.chat_id}"
+
+        token = App.get_running_app().token
+        headers = {'Authorization': f'Bearer {token}'}
+        print(f"Connecting to WebSocket: {uri}")
+        try:
+            async with websockets.connect(uri, extra_headers=headers) as websocket:
+                self.websocket = websocket
+                self.chat_text_layout = chat_text_layout
+                print("WebSocket connection established")
+                while True:
+                    message = await websocket.recv()
+                    print(f"Received message: {message}")
+                    # Clock.schedule_once(lambda dt: self.update_chat_display(message))
+                    try:
+                        data = json.loads(message)
+                        Clock.schedule_once(lambda dt: self.update_chat_display(data, dt))
+                    except json.JSONDecodeError as e:
+                        print(f"JSON decode error: {e}")
+        except Exception as e:
+            print(f"WebSocket connection error: {e}")
+
+    def update_chat_display(self, data, dt):
+        if self.chat_text_layout is not None:
+            content = data.get('message', 'No message')
+            email = data.get('email', 'No email')
+            timestamp = data.get('time', 'No time')
+
+            prefix = 'Сообщение от ' + str(email) + ' в ' + str(timestamp)
+
+            # Определяем, слева или справа будет сообщение
+            if email == self.app.current_user_email:
+                halign = 'left'
+            else:
+                halign = 'right'
+
+            label_prefix = Label(
+                text=prefix,
+                size_hint_y=None,
+                height=20,
+                font_size=10,
+                color=(1, 1, 0, 1),
+                halign=halign,
+                valign='top'
+            )
+            label_prefix.bind(size=label_prefix.setter('text_size'))
+
+            label_message = Label(
+                text=content,
+                size_hint_y=None,
+                height=30,
+                font_size=16,
+                halign=halign,
+                valign='middle'
+            )
+            label_message.bind(size=label_message.setter('text_size'))
+
+            # Создаем вертикальный BoxLayout для выравнивания
+            message_box = BoxLayout(orientation='vertical', size_hint_y=None, height=50, padding=5)
+            message_box.add_widget(label_prefix)
+            message_box.add_widget(label_message)
+
+            # Создаем горизонтальный BoxLayout для выравнивания слева или справа
+            alignment_box = BoxLayout(size_hint_y=None, height=50, padding=5)
+            if halign == 'left':
+                alignment_box.add_widget(message_box)
+                alignment_box.add_widget(Widget())
+            else:
+                alignment_box.add_widget(Widget())
+                alignment_box.add_widget(message_box)
+
+            self.chat_text_layout.add_widget(alignment_box)
+
+            # Автоматическая прокрутка вниз
+            self.scroll_view.scroll_to(self.chat_text_layout)
 
     def check_token(self, parent_layout, left_layout):
         parent_layout.clear_widgets()
@@ -586,10 +772,19 @@ class Groups(GridLayout):
 
         token = App.get_running_app().token
 
-        url = 'https://fastapi-1dyl.onrender.com/peoplegroupesassociation/check'
+        if self.app.store.exists('check_groups'):
+            cached_data = self.app.store.get('check_groups')
+            # Проверка, что данные не устарели (менее 3000 секунд)
+            if time.time() - cached_data['timestamp'] < 3000:
+                self.on_groups_success(None, cached_data['result'], parent_layout, left_layout)
+                return
+            else:
+                self.app.store.delete('check_groups')
+
+        url = 'http://127.0.0.1:8000/peoplegroupesassociation/check'
         headers = {'Authorization': f'Bearer {token}'}
         # Добавляем параметр on_redirect для обработки перенаправлений
-        UrlRequest(url, req_headers=headers,
+        UrlRequest(url, req_headers=headers, on_failure=self.on_groups_failure,
                    on_success=lambda req, res: self.on_groups_success(req, res, parent_layout, left_layout),
                    on_redirect=lambda req, res: self.on_groups_redirect(req, res, parent_layout, left_layout))
 
@@ -613,6 +808,10 @@ class Groups(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_groups_success(self, request, result, parent_layout, left_layout):
+
+        if not self.app.store.exists('check_groups'):
+            self.app.store.put('check_groups', result=result, timestamp=time.time())
+
         parent_layout.clear_widgets()
         left_layout.clear_widgets()
         groups_name_layout = BoxLayout(orientation='vertical')
@@ -671,27 +870,6 @@ class Groups(GridLayout):
 
         left_layout.add_widget(groups_name_layout)
 
-    def start_chat_updates(self, instance, temp_id, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout):
-        def update_chat(*args):
-            self.open_chat_full(instance, temp_id, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout)
-
-        # Останавливаем предыдущую задачу, если она была
-        if self.update_event:
-            Clock.unschedule(self.update_event)
-
-        # Запускаем новую задачу
-        self.update_event = Clock.schedule_interval(update_chat, 4)
-
-    def stop_chat_update(self, go_back=False, temp_id=None, result=None, left_layout=None, parent_layout=None):
-        if self.update_event:
-            Clock.unschedule(self.update_event)
-            self.update_event = None
-
-        # Если требуется вернуться в предыдущее меню
-        if go_back:
-            self.groupe_in(instance=None, temp_id=temp_id, result=result, left_layout=left_layout,
-                           parent_layout=parent_layout)
-
     def open_chat(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
         left_layout.clear_widgets()
 
@@ -707,9 +885,13 @@ class Groups(GridLayout):
 
         chat_main_layout = GridLayout(rows=2, spacing=3)
 
-        chat_text_layout = BoxLayout(orientation='vertical', size_hint_y=0.70)
-        chat_input_layout = BoxLayout(orientation='vertical', size_hint_y=0.30)
+        chat_text_layout = BoxLayout(orientation='vertical', size_hint_y=None)
+        chat_text_layout.bind(minimum_height=chat_text_layout.setter('height'))
 
+        self.scroll_view = ScrollView(size_hint=(1, 0.8))
+        self.scroll_view.add_widget(chat_text_layout)
+
+        chat_input_layout = BoxLayout(orientation='vertical', size_hint_y=0.2)
 
         self.message_input = TextInput(multiline=True)
         chat_input_layout.add_widget(self.message_input)
@@ -718,141 +900,65 @@ class Groups(GridLayout):
                                              left_layout=left_layout, parent_layout=parent_layout))
         chat_input_layout.add_widget(message_button)
 
-        chat_main_layout.add_widget(chat_text_layout)
+        chat_main_layout.add_widget(self.scroll_view)
         chat_main_layout.add_widget(chat_input_layout)
 
         parent_layout.add_widget(chat_main_layout)
 
-        # Запускаем обновления чата
-        self.start_chat_updates(instance, temp_id_val, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout)
+        self.chat_text_layout = chat_text_layout  # добавьте это, чтобы сохранить ссылку на layout
 
-    def open_chat_full(self, instance, temp_id, temp_id_val, temp_groupe_val, chat_text_layout,
-                       parent_layout):
+        # Сначала загружаем историю сообщений
+        self.chat_id = temp_id_val
+        print(f"Открытие чата с id: {self.chat_id}")
+        asyncio.run_coroutine_threadsafe(self.load_chat_history(temp_id_val), self.loop)
 
-        token = App.get_running_app().token
-        pk = temp_id_val
-        url = f'https://fastapi-1dyl.onrender.com/chat/{pk}'
-        headers = {'Authorization': f'Bearer {token}'}
+        # Запускаем асинхронное обновление чата через WebSocket
+        asyncio.run_coroutine_threadsafe(self.websocket_connect(chat_text_layout), self.loop)
+        print("WebSocket connect task created")
 
-        UrlRequest(url, req_headers=headers,
-                   on_success=lambda req, res: self.on_open_chat_success(req, res, temp_id_val, temp_groupe_val,
-                                                                         chat_text_layout, parent_layout),
-                   on_failure=lambda req, res: self.on_open_chat_failure(req, res, temp_id_val, temp_groupe_val,
-                                                                         chat_text_layout, parent_layout))
-
-    def on_open_chat_failure(self, request, result, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout):
-        # Пустой result для случая, когда нет сообщений
-        self.on_open_chat_success(request=request, result=None, temp_id_val=temp_id_val,
-                                  temp_groupe_val=temp_groupe_val, chat_text_layout=chat_text_layout,
-                                  parent_layout=parent_layout)
-
-    def on_open_chat_success(self, request, result, temp_id_val, temp_groupe_val, chat_text_layout, parent_layout):
-        # parent_layout.clear_widgets()
-
-        chat_text_layout.clear_widgets()
-
-        chat_layout = BoxLayout(orientation='vertical')
-        chat_screen_layout = ScrollView(size_hint_y=0.8)
-
-        messages_container = BoxLayout(orientation='vertical', size_hint_y=None)
-        messages_container.bind(minimum_height=messages_container.setter('height'))
-
-        if result:
-            for chat in result:
-                temp_content = chat['content']
-                temp_user_id = chat['user']['email']
-                temp_timestamp = chat['timestamp']
-
-                prefix = 'Сообщение от ' + str(temp_user_id) + ' в ' + temp_timestamp
-
-                # Определяем, слева или справа будет сообщение
-                if temp_user_id == self.app.current_user_email:
-                    halign = 'left'
-                else:
-                    halign = 'right'
-
-                label_prefix = Label(
-                    text=prefix,
-                    size_hint_y=None,
-                    height=20,  # Высота уменьшена для меньшего шрифта
-                    font_size=10,  # Меньший размер шрифта для prefix
-                    color=(1, 1, 0, 1),
-                    halign=halign,
-                    valign='top'
-                )
-                label_prefix.bind(size=label_prefix.setter('text_size'))
-
-                label_message = Label(
-                    text=temp_content,
-                    size_hint_y=None,
-                    height=30,
-                    font_size=16,
-                    halign=halign,
-                    valign='middle'
-                )
-                label_message.bind(size=label_message.setter('text_size'))
-
-                # Создаем вертикальный BoxLayout для выравнивания
-                message_box = BoxLayout(orientation='vertical', size_hint_y=None, height=50, padding=5)
-                message_box.add_widget(label_prefix)
-                message_box.add_widget(label_message)
-
-                # Создаем горизонтальный BoxLayout для выравнивания слева или справа
-                alignment_box = BoxLayout(size_hint_y=None, height=50, padding=5)
-                if halign == 'left':
-                    alignment_box.add_widget(message_box)
-                    alignment_box.add_widget(Widget())
-                else:
-                    alignment_box.add_widget(Widget())
-                    alignment_box.add_widget(message_box)
-
-                messages_container.add_widget(alignment_box)
-        else:
-            # Добавляем сообщение о том, что чат пуст
-            empty_label = Label(
-                text="Чат пока пуст. Будьте первым, кто отправит сообщение!",
-                size_hint_y=None,
-                height=30,
-                font_size=16,
-                halign='center',
-                valign='middle'
-            )
-            empty_label.bind(size=empty_label.setter('text_size'))
-            messages_container.add_widget(empty_label)
-
-        chat_screen_layout.add_widget(messages_container)
-        chat_layout.add_widget(chat_screen_layout)
-        chat_text_layout.add_widget(chat_layout)
-        self.scroll_to_bottom(chat_screen_layout)
-
-    def scroll_to_bottom(self, scroll_view):
-        scroll_view.scroll_y = 0
-
+    def stop_chat_update(self, go_back, temp_id, result, left_layout, parent_layout):
+        if self.websocket:
+            asyncio.run_coroutine_threadsafe(self.websocket.close(), self.loop)
+            self.websocket = None
+        if go_back:
+            self.app.show_groups(None)
 
     def add_message(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
-
         temp_message = self.message_input.text.strip()
         self.message_input.text = ''
-        token = App.get_running_app().token
 
-        url = 'https://fastapi-1dyl.onrender.com/chat/'
-        headers = {'Authorization': f'Bearer {token}'}
+        if self.websocket:
+            asyncio.run_coroutine_threadsafe(self.send_message(temp_message), self.loop)
 
-        request_data = json.dumps({
-            'content': temp_message,
-            'groups_id': temp_id_val,
+    async def send_message(self, message):
+        if self.websocket:
+            # Форматируем сообщение в JSON, добавляя токен
+            token = App.get_running_app().token
+            formatted_message = json.dumps({
+                "message": message,
+                "token": token
+            })
+            await self.websocket.send(formatted_message)
 
-        })
-
-        UrlRequest(url, method='POST', req_headers=headers, req_body=request_data)
-
+    def on_start(self):
+        asyncio.ensure_future(self.connect_websocket())
 
     def open_lection(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
 
         left_layout.clear_widgets()
-        token = App.get_running_app().token
 
-        url = 'https://fastapi-1dyl.onrender.com/lessons/list'
+        if self.app.store.exists('open_lection'):
+            cached_data = self.app.store.get('open_lection')
+            # Проверка, что данные не устарели (менее 3000 секунд)
+            if time.time() - cached_data['timestamp'] < 3000:
+                self.on_open_lection_success(None, cached_data['result'], temp_groupe_val, temp_id_val, left_layout,
+                                             parent_layout)
+                return
+            else:
+                self.app.store.delete('open_lection')
+
+        token = App.get_running_app().token
+        url = 'http://127.0.0.1:8000/lessons/list'
         headers = {'Authorization': f'Bearer {token}'}
 
         request_data = json.dumps({
@@ -870,6 +976,10 @@ class Groups(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_open_lection_success(self, request, result, temp_groupe_val, temp_id_val, left_layout, parent_layout):
+
+        if not self.app.store.exists('open_lection'):
+            self.app.store.put('open_lection', result=result, timestamp=time.time())
+
         parent_layout.clear_widgets()
         left_layout.clear_widgets()
         groups_name_layout = BoxLayout(orientation='vertical')
@@ -932,6 +1042,8 @@ class MyApp(App):
     store = JsonStore('cache.json')
 
     def build(self):
+        self.store.clear()  # чистим кэш
+
         self.base_gridlayout = GridLayout(rows=2, spacing=3)
 
         self.nav_gridlayout_onbase = GridLayout(cols=5, spacing=3, size_hint_y=0.10)
@@ -982,8 +1094,6 @@ class MyApp(App):
     def show_auth(self, instance):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.auth_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
-        if self.group_instance:
-            self.group_instance.stop_chat_update()  # Остановка обновлений
 
     def show_main(self, instance):
         self.central_mainpage_onbase.clear_widgets()
@@ -993,15 +1103,11 @@ class MyApp(App):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.left_nav_mainpage_onbase.clear_widgets()
         self.courses_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
-        if self.group_instance:
-            self.group_instance.stop_chat_update()  # Остановка обновлений
 
     def show_groups(self, instance):
         self.left_nav_mainpage_onbase.clear_widgets()
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
         self.group_instance.check_token(self.central_mainpage_onbase, self.left_nav_mainpage_onbase)
-        if self.group_instance:
-            self.group_instance.stop_chat_update()  # Остановка обновлений
 
     def on_auth_success(self, instance):
         # Вызывается после успешной авторизации
@@ -1021,6 +1127,10 @@ class MyApp(App):
         self.group_button.disabled = True
         self.group_button.opacity = 0
         self.group_button.disabled = True
+
+    def on_stop(self):
+        # Очистка кэша при завершении работы приложения
+        self.store.clear()
 
 
 def on_start(self):

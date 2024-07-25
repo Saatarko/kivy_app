@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import requests
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.graphics import RoundedRectangle, Rectangle, Color
+from kivy.properties import ListProperty, NumericProperty
 from kivy.storage.jsonstore import JsonStore
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -26,6 +28,7 @@ import websockets
 import threading
 import asynckivy
 import httpx
+
 
 class NotificationManager:
     def __init__(self):
@@ -140,6 +143,7 @@ class Auth(GridLayout):
 
     def update_people(self, instance, parent_layout, pk):
         token = App.get_running_app().token
+
         if token:
             user_url = f'http://127.0.0.1:8000/people/update/{pk}'
             headers = {'Authorization': f'Bearer {token}', 'accept': 'application/json'}
@@ -158,7 +162,10 @@ class Auth(GridLayout):
                        on_success=self.on_update_people_success, on_failure=self.on_update_people_failure)
 
     def on_update_people_success(self, request, result):
-        # Сохранение токена аутентификации и переход к экрану курсов
+
+        if self.app.store.exists('on_people'):
+            self.app.store.delete('on_people')
+
         notification_manager.show_popup_update_people()
 
     def on_update_people_failure(self, request, result):
@@ -310,6 +317,7 @@ class Auth(GridLayout):
         App.get_running_app().token_check = None
 
         self.app.hide_button_on_logout(None)  # убираем кнпоки при выходе
+        self.app.store.clear()  # чистим кэш
 
         notification_manager.show_popup_success_logout()
         # Обновление вкладки аутентификации
@@ -341,10 +349,20 @@ class Auth(GridLayout):
     #         App.get_running_app().token_check = None
     #         self.create_login_layout(parent_layout)  # Добавляем layout для login непосредственно
 
-    def check_profile(self, type, callback=None):  # callback заставляет асинхронщиу дожидаться ответа по функции
+    def check_profile(self, type, callback=None):
         if isinstance(type, str):
             token = App.get_running_app().token
             if token:
+                # Проверка наличия кэшированных данных
+                if self.app.store.exists('check_profile'):
+                    cached_data = self.app.store.get('check_profile')
+                    # Проверка, что данные не устарели (менее 3000 секунд)
+                    if time.time() - cached_data['timestamp'] < 3000:
+                        self.on_check_profile_success(None, cached_data['result'], callback)
+                        return
+                    else:
+                        self.app.store.delete('check_profile')
+
                 user_url = 'http://127.0.0.1:8000/api/v1/auth/me'
                 headers = {'Authorization': f'Bearer {token}'}
                 UrlRequest(user_url, req_headers=headers,
@@ -359,12 +377,25 @@ class Auth(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_check_profile_success(self, request, result, callback=None):
+        # Сохранение результата в кэш
+        if not self.app.store.exists('check_profile'):
+            self.app.store.put('check_profile', result=result, timestamp=time.time())
         pk = result['id']
         token = App.get_running_app().token
         if token:
+
+            if self.app.store.exists('on_people'):
+                cached_data = self.app.store.get('on_people')
+                # Проверка, что данные не устарели (менее 3000 секунд)
+                if time.time() - cached_data['timestamp'] < 3000:
+                    self.on_people_success(None, pk, cached_data['result'], callback)
+                    return
+                else:
+                    self.app.store.delete('on_people')
+
             profile_url = f'http://127.0.0.1:8000/people/{pk}'
             headers = {'Authorization': f'Bearer {token}'}
-            # Добавляем параметр on_redirect для обработки перенаправлений
+            # Запрос данных профиля пользователя
             UrlRequest(profile_url, req_headers=headers,
                        on_success=lambda req, res: self.on_people_success(req, pk, res, callback),
                        on_failure=lambda req, res: self.on_people_failure(req, pk, res, callback))
@@ -373,6 +404,10 @@ class Auth(GridLayout):
                 callback(result)
 
     def on_people_success(self, request, pk, result, callback=None):
+
+        if not self.app.store.exists('on_people'):
+            self.app.store.put('on_people', result=result, timestamp=time.time())  # сохранение данных в Кеш
+
         data = {'first_name': result['first_name'],
                 'last_name': result['last_name'],
                 'age': result['age'],
@@ -395,19 +430,23 @@ class Auth(GridLayout):
         password = self.reg_password_input.text.strip()
         password2 = self.reg_password_input2.text.strip()
         if password == password2:
-            reg_url = 'http://127.0.0.1:8000/api/v1/auth/register'
-            request_data = json.dumps({
-                'email': email,
-                'password': password,
-                'is_active': True,
-                'is_superuser': False,
-                'is_verified': False
-            })
-            headers = {'Content-type': 'application/json'}
-            parent_layout.clear_widgets()
-            UrlRequest(reg_url, req_body=request_data, req_headers=headers,
-                       on_success=lambda req, res: self.on_reg_success(req, res, password),
-                       on_failure=self.on_reg_failure)
+            if len(password) > 3:
+                reg_url = 'http://127.0.0.1:8000/api/v1/auth/register'
+                request_data = json.dumps({
+                    'email': email,
+                    'password': password,
+                    'is_active': True,
+                    'is_superuser': False,
+                    'is_verified': False
+                })
+                headers = {'Content-type': 'application/json'}
+                parent_layout.clear_widgets()
+                UrlRequest(reg_url, req_body=request_data, req_headers=headers,
+                           on_success=lambda req, res: self.on_reg_success(req, res, password),
+                           on_failure=self.on_reg_failure)
+            else:
+                message = 'пароль слишком короткий:'
+                notification_manager.show_popup_error(message)
         else:
             message = 'Введенные пароли не одинаковые:'
             notification_manager.show_popup_error(message)
@@ -452,9 +491,11 @@ class Courses(GridLayout):
     def check_courses(self, parent_layout, left_layout):
         if self.app.store.exists('courses'):
             cached_data = self.app.store.get('courses')
-            if time.time() - cached_data['timestamp'] < 1800:  # 1800 секунд = 30 минут
+            if time.time() - cached_data['timestamp'] < 3000:  # = 50 минут
                 self.on_courses_success(None, cached_data['result'], parent_layout, left_layout)
                 return
+            else:
+                self.app.store.delete('courses')
 
         token = App.get_running_app().token
         courses_url = 'http://127.0.0.1:8000/courses'
@@ -488,8 +529,8 @@ class Courses(GridLayout):
 
     def on_courses_success(self, request, result, parent_layout, left_layout):
 
-        self.app.store.put('courses', request=request, result=result, parent_layout=parent_layout,
-                           left_layout=left_layout, timestamp=time.time())
+        if not self.app.store.exists('courses'):
+            self.app.store.put('courses', result=result, timestamp=time.time())
 
         parent_layout.clear_widgets()
         left_layout.clear_widgets()
@@ -578,6 +619,10 @@ class Courses(GridLayout):
 
     def on_course_order_success_all(self, request, result):
         self.app.on_group_success(None)
+
+        if self.app.store.exists('check_groups'):  # очистка кэша списка групп при вступлении в новую группу
+            self.app.store.delete('check_groups')
+
         notification_manager.show_popup_order_courses_and_groups()
 
 
@@ -729,6 +774,15 @@ class Groups(GridLayout):
 
         token = App.get_running_app().token
 
+        if self.app.store.exists('check_groups'):
+            cached_data = self.app.store.get('check_groups')
+            # Проверка, что данные не устарели (менее 3000 секунд)
+            if time.time() - cached_data['timestamp'] < 3000:
+                self.on_groups_success(None, cached_data['result'], parent_layout, left_layout)
+                return
+            else:
+                self.app.store.delete('check_groups')
+
         url = 'http://127.0.0.1:8000/peoplegroupesassociation/check'
         headers = {'Authorization': f'Bearer {token}'}
         # Добавляем параметр on_redirect для обработки перенаправлений
@@ -756,6 +810,10 @@ class Groups(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_groups_success(self, request, result, parent_layout, left_layout):
+
+        if not self.app.store.exists('check_groups'):
+            self.app.store.put('check_groups', result=result, timestamp=time.time())
+
         parent_layout.clear_widgets()
         left_layout.clear_widgets()
         groups_name_layout = BoxLayout(orientation='vertical')
@@ -890,8 +948,18 @@ class Groups(GridLayout):
     def open_lection(self, instance, temp_id_val, temp_groupe_val, left_layout, parent_layout):
 
         left_layout.clear_widgets()
-        token = App.get_running_app().token
 
+        if self.app.store.exists('open_lection'):
+            cached_data = self.app.store.get('open_lection')
+            # Проверка, что данные не устарели (менее 3000 секунд)
+            if time.time() - cached_data['timestamp'] < 3000:
+                self.on_open_lection_success(None, cached_data['result'], temp_groupe_val, temp_id_val, left_layout,
+                                             parent_layout)
+                return
+            else:
+                self.app.store.delete('open_lection')
+
+        token = App.get_running_app().token
         url = 'http://127.0.0.1:8000/lessons/list'
         headers = {'Authorization': f'Bearer {token}'}
 
@@ -910,6 +978,10 @@ class Groups(GridLayout):
         notification_manager.show_popup_error(message)
 
     def on_open_lection_success(self, request, result, temp_groupe_val, temp_id_val, left_layout, parent_layout):
+
+        if not self.app.store.exists('open_lection'):
+            self.app.store.put('open_lection', result=result, timestamp=time.time())
+
         parent_layout.clear_widgets()
         left_layout.clear_widgets()
         groups_name_layout = BoxLayout(orientation='vertical')
@@ -972,6 +1044,8 @@ class MyApp(App):
     store = JsonStore('cache.json')
 
     def build(self):
+        self.store.clear()  # чистим кэш
+
         self.base_gridlayout = GridLayout(rows=2, spacing=3)
 
         self.nav_gridlayout_onbase = GridLayout(cols=5, spacing=3, size_hint_y=0.10)
@@ -1055,6 +1129,11 @@ class MyApp(App):
         self.group_button.disabled = True
         self.group_button.opacity = 0
         self.group_button.disabled = True
+
+    def on_stop(self):
+        # Очистка кэша при завершении работы приложения
+        self.store.clear()
+
 
 
 def on_start(self):
