@@ -29,6 +29,9 @@ import threading
 import asynckivy
 import httpx
 
+letters = 'abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрстуфхцчшщъыьэюя-'
+numbers = '1234567890+'
+spec_s = ' ,.'
 
 class NotificationManager:
     def __init__(self):
@@ -151,15 +154,19 @@ class Auth(GridLayout):
             first_name = self.firstname_input.text.strip()
             last_name = self.lastname_input.text.strip()
             age = self.age_input.text.strip()
-            request_data = json.dumps({
-                'first_name': first_name,
-                'last_name': last_name,
-                'age': age,
-            })
 
-            parent_layout.clear_widgets()
-            UrlRequest(user_url, method='PUT', req_body=request_data, req_headers=headers,
-                       on_success=self.on_update_people_success, on_failure=self.on_update_people_failure)
+            if validate_profile_data(first_name, last_name, age) is True:
+
+
+                request_data = json.dumps({
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'age': age,
+                })
+
+                parent_layout.clear_widgets()
+                UrlRequest(user_url, method='PUT', req_body=request_data, req_headers=headers,
+                           on_success=self.on_update_people_success, on_failure=self.on_update_people_failure)
 
     def on_update_people_success(self, request, result):
 
@@ -173,6 +180,30 @@ class Auth(GridLayout):
         message = f'Ошибка обновления профиля: {msg}'
         notification_manager.show_popup_error(message)
 
+    @staticmethod
+    def validate_profile_data(first_name, last_name, age):
+        for s in first_name:
+            if len(s.strip(letters)) != 0:
+                message = 'В Имени допустимы только буквы!'
+                notification_manager.show_popup_error(message)
+
+                return False
+
+        for s in last_name:
+            if len(s.strip(letters)) != 0:
+                message = 'В Фамилии допустимы только буквы!'
+                notification_manager.show_popup_error(message)
+
+                return False
+
+        for s in age:
+            if len(s.strip(numbers)) != 0:
+                message = 'В обозначении возраста допустимы только цифры'
+                notification_manager.show_popup_error(message)
+
+                return False
+        return True
+
     def create_people(self, instance, parent_layout):
 
         token = App.get_running_app().token
@@ -184,17 +215,19 @@ class Auth(GridLayout):
             last_name = self.lastname_input.text.strip()
             age = self.age_input.text.strip()
 
-            request_data = json.dumps({
-                'first_name': first_name,
-                'last_name': last_name,
-                'age': age,
-            })
+            if validate_profile_data(first_name,last_name, age) is True:
 
-            parent_layout.clear_widgets()
+                request_data = json.dumps({
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'age': age,
+                })
 
-            UrlRequest(create_people_url, method='POST', req_body=request_data, req_headers=headers,
-                       on_success=self.on_create_people_success,
-                       on_failure=self.create_people_failure)
+                parent_layout.clear_widgets()
+
+                UrlRequest(create_people_url, method='POST', req_body=request_data, req_headers=headers,
+                           on_success=self.on_create_people_success,
+                           on_failure=self.create_people_failure)
 
     def on_create_people_success(self, request, result):
         # Сохранение токена аутентификации и переход к экрану курсов
