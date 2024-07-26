@@ -4,10 +4,15 @@ from typing import Any
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
 
+from kivy.config import Config
+
+Config.set('graphics', 'width', '600')
+Config.set('graphics', 'height', '800')
+
 import requests
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.graphics import RoundedRectangle, Rectangle, Color
+from kivy.graphics import RoundedRectangle, Rectangle, Color, Line
 from kivy.properties import ListProperty, NumericProperty
 from kivy.storage.jsonstore import JsonStore
 from kivy.uix.boxlayout import BoxLayout
@@ -29,6 +34,7 @@ import threading
 import asynckivy
 import httpx
 
+
 letters = 'abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрстуфхцчшщъыьэюя-'
 numbers = '1234567890+'
 spec_s = ' ,.'
@@ -41,7 +47,8 @@ class NotificationManager:
         content = BoxLayout(orientation='vertical')
         label = Label(text=message, text_size=(400, None), halign='center')
         content.add_widget(label)
-        closed_button = Button(text='Закрыть', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        closed_button = Button(text='Закрыть', size_hint_x=0.5, pos_hint={'center_x': 0.5},
+                               background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
 
         popup = Popup(title=title,
                       content=content,
@@ -91,13 +98,15 @@ class Auth(GridLayout):
             last_name = data['last_name']
             age = data['age']
             pk = data['pk']
-            save_button = Button(text='Обновить данные профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+            save_button = Button(text='Обновить данные профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5},
+                                 background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
             save_button.bind(on_press=partial(self.update_people, parent_layout=parent_layout, pk=pk))
         else:
             first_name = ''
             last_name = ''
             age = 0
-            save_button = Button(text='Сохранить данные профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+            save_button = Button(text='Сохранить данные профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5},
+                                 background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
             save_button.bind(on_press=partial(self.create_people, parent_layout=parent_layout))
 
         login_layout = BoxLayout(orientation='vertical')
@@ -129,11 +138,13 @@ class Auth(GridLayout):
 
         login_layout.add_widget(save_button)
 
-        logout_button = Button(text='Выход из системы', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        logout_button = Button(text='Выход из пользователя ', size_hint_x=0.5, pos_hint={'center_x': 0.5},
+                               background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         logout_button.bind(on_press=partial(self.logout, parent_layout=parent_layout))
         login_layout.add_widget(logout_button)
 
-        logout_button_closed = Button(text='Закрыть окно профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        logout_button_closed = Button(text='Закрыть окно профиля', size_hint_x=0.5, pos_hint={'center_x': 0.5},
+                                      background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         logout_button_closed.bind(on_press=partial(self.closed, parent_layout=parent_layout))
         login_layout.add_widget(logout_button_closed)
 
@@ -155,7 +166,7 @@ class Auth(GridLayout):
             last_name = self.lastname_input.text.strip()
             age = self.age_input.text.strip()
 
-            if validate_profile_data(first_name, last_name, age) is True:
+            if self.validate_profile_data(first_name, last_name, age) is True:
 
 
                 request_data = json.dumps({
@@ -215,7 +226,7 @@ class Auth(GridLayout):
             last_name = self.lastname_input.text.strip()
             age = self.age_input.text.strip()
 
-            if validate_profile_data(first_name,last_name, age) is True:
+            if self.validate_profile_data(first_name, last_name, age) is True:
 
                 request_data = json.dumps({
                     'first_name': first_name,
@@ -251,7 +262,8 @@ class Auth(GridLayout):
         login_layout.add_widget(Label(text='Пароль', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
         self.password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
         login_layout.add_widget(self.password_input)
-        login_button = Button(text='Войти', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        login_button = Button(text='Войти', size_hint_x=0.5, pos_hint={'center_x': 0.5},
+                              background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         login_button.bind(on_press=partial(self.login, parent_layout=parent_layout))
         login_layout.add_widget(login_button)
         login_layout.add_widget(Widget())
@@ -268,7 +280,8 @@ class Auth(GridLayout):
         self.reg_password_input2 = TextInput(size_hint_x=0.5, password=True, multiline=False,
                                              pos_hint={'center_x': 0.5})
         login_layout.add_widget(self.reg_password_input2)
-        reg_button = Button(text='Регистрация', size_hint_x=0.5, pos_hint={'center_x': 0.5})
+        reg_button = Button(text='Регистрация', size_hint_x=0.5, pos_hint={'center_x': 0.5},
+                            background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         reg_button.bind(on_press=partial(self.registration, parent_layout=parent_layout))
         login_layout.add_widget(reg_button)
         login_layout.add_widget(Widget())
@@ -572,7 +585,8 @@ class Courses(GridLayout):
         for course in result:
             temp_text = course['name']
             temp_id = course['id']
-            courses_name = Button(text=temp_text)
+            courses_name = Button(text=temp_text,
+                                  background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
             courses_name.bind(
                 on_press=partial(self.course_description, temp_id=temp_id, result=result, parent_layout=parent_layout))
             courses_name_layout.add_widget(courses_name)
@@ -602,7 +616,8 @@ class Courses(GridLayout):
         courses_description_layout.add_widget(Widget())
         courses_description_layout.add_widget(label_price)
 
-        courses_order = Button(text='Записаться на курсы')
+        courses_order = Button(text='Записаться на курсы',
+                               background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         courses_order.bind(
             on_press=partial(self.course_order, true_id=true_id, result=result, parent_layout=parent_layout))
         courses_description_layout.add_widget(courses_order)
@@ -855,7 +870,8 @@ class Groups(GridLayout):
         for group in result:
             temp_text = group['name']
             temp_id = group['id']
-            groups_button = Button(text=temp_text)
+            groups_button = Button(text=temp_text,
+                                   background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
             groups_button.bind(
                 on_press=partial(self.groupe_in, temp_id=temp_id, result=result, left_layout=left_layout,
                                  parent_layout=parent_layout))
@@ -881,7 +897,8 @@ class Groups(GridLayout):
 
         groups_name_layout.add_widget(label1)
 
-        chat_button = Button(text='Чат')
+        chat_button = Button(text='Чат',
+                             background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         chat_button.bind(
             on_press=partial(self.open_chat, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
                              left_layout=left_layout,
@@ -889,7 +906,8 @@ class Groups(GridLayout):
         groups_name_layout.add_widget(Widget())
         groups_name_layout.add_widget(chat_button)
 
-        lection_button = Button(text='Лекции')
+        lection_button = Button(text='Лекции',
+                                background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         lection_button.bind(
             on_press=partial(self.open_lection, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
                              left_layout=left_layout,
@@ -897,7 +915,8 @@ class Groups(GridLayout):
         groups_name_layout.add_widget(Widget())
         groups_name_layout.add_widget(lection_button)
 
-        back_button = Button(text='Назад')
+        back_button = Button(text='Назад',
+                             background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         back_button.bind(
             on_press=self.app.show_groups)
         groups_name_layout.add_widget(Widget())
@@ -911,7 +930,8 @@ class Groups(GridLayout):
         chat_layout = BoxLayout(orientation='vertical')
         chat_layout.add_widget(Widget())
 
-        back_button2 = Button(text='Назад')
+        back_button2 = Button(text='Назад',
+                              background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         back_button2.bind(on_press=lambda x: self.stop_chat_update(go_back=True, temp_id=temp_id_val,
                                                                    result=temp_groupe_val, left_layout=left_layout,
                                                                    parent_layout=parent_layout))
@@ -930,7 +950,8 @@ class Groups(GridLayout):
 
         self.message_input = TextInput(multiline=True)
         chat_input_layout.add_widget(self.message_input)
-        message_button = Button(text='Отправить сообщение')
+        message_button = Button(text='Отправить сообщение',
+                                background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         message_button.bind(on_press=partial(self.add_message, temp_id_val=temp_id_val, temp_groupe_val=temp_groupe_val,
                                              left_layout=left_layout, parent_layout=parent_layout))
         chat_input_layout.add_widget(message_button)
@@ -1023,14 +1044,14 @@ class Groups(GridLayout):
         for lesson in result:
             temp_text = lesson['title']
             temp_id = lesson['id']
-            lesson_button = Button(text=temp_text)
+            lesson_button = Button(text=temp_text, background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
             lesson_button.bind(
                 on_press=partial(self.lesson_description, temp_id=temp_id, result=result, left_layout=left_layout,
                                  parent_layout=parent_layout))
             groups_name_layout.add_widget(lesson_button)
             groups_name_layout.add_widget(Widget())
 
-        back_button2 = Button(text='Назад')
+        back_button2 = Button(text='Назад', background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         temp_id = temp_id_val
         back_button2.bind(
             on_press=partial(self.groupe_in, temp_id=temp_id, result=temp_groupe_val, left_layout=left_layout,
@@ -1081,31 +1102,32 @@ class MyApp(App):
 
         self.base_gridlayout = GridLayout(rows=2, spacing=3)
 
-        self.nav_gridlayout_onbase = GridLayout(cols=5, spacing=3, size_hint_y=0.10)
+        self.nav_gridlayout_onbase = GridLayout(cols=6, spacing=3, size_hint_y=0.10)
 
-        self.main_button = Button(text='Главная')
+        self.main_button = Button(text='Главная', background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         self.main_button.bind(on_press=self.show_main)
         self.nav_gridlayout_onbase.add_widget(self.main_button)
 
         self.courses_instance = Courses(app=self)
-        self.courses_button = Button(text='Курсы')
+        self.courses_button = Button(text='Курсы', background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         self.courses_button.bind(on_press=self.show_courses)
         self.nav_gridlayout_onbase.add_widget(self.courses_button)
         self.courses_button.opacity = 0
         self.courses_button.disabled = True
 
         self.group_instance = Groups(app=self)
-        self.group_button = Button(text='Группа')
+        self.group_button = Button(text='Группа', background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         self.group_button.bind(on_press=self.show_groups)
         self.nav_gridlayout_onbase.add_widget(self.group_button)
         self.group_button.opacity = 0
         self.group_button.disabled = True
 
         self.nav_gridlayout_onbase.add_widget(Widget())
+        self.nav_gridlayout_onbase.add_widget(Widget())
         # Создаем экземпляр Auth, передавая ссылку на текущий экземпляр MyApp
         self.auth_instance = Auth(app=self)
 
-        self.auth_button = Button(text='Вход/Регист')
+        self.auth_button = Button(text='Вход/Регист', background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
         self.auth_button.bind(on_press=self.show_auth)
         self.nav_gridlayout_onbase.add_widget(self.auth_button)
 
@@ -1124,7 +1146,56 @@ class MyApp(App):
         self.base_gridlayout.add_widget(self.nav_gridlayout_onbase)
         self.base_gridlayout.add_widget(self.mainpage_onbase)
 
+        with self.base_gridlayout.canvas.before:
+            self.central_bg = Rectangle(source='1.png', pos=self.base_gridlayout.pos,
+                                        size=self.base_gridlayout.size)
+            Color(0, 0, 1, 1)  # Синий цвет для границы
+            self.central_rect = Line(rectangle=(
+            self.base_gridlayout.x, self.base_gridlayout.y, self.base_gridlayout.width,
+            self.base_gridlayout.height), width=2)
+
+        self.base_gridlayout.bind(pos=self.update_base, size=self.update_base)
+
+        # Добавляем синюю границу
+        # with self.central_mainpage_onbase.canvas.before:
+        #     Color(1, 1, 0, 1)  # Желтый цвет для фона
+        #     self.central_bg = Rectangle(pos=self.central_mainpage_onbase.pos, size=self.central_mainpage_onbase.size)
+        #     Color(0, 0, 1, 1)  # Синий цвет для границы
+        #     self.central_rect = Line(rectangle=(
+        #     self.central_mainpage_onbase.x, self.central_mainpage_onbase.y, self.central_mainpage_onbase.width,
+        #     self.central_mainpage_onbase.height), width=2)
+        #
+        # self.central_mainpage_onbase.bind(pos=self.update_central, size=self.update_central)
+        #
+        # # Добавляем золотую границу для left_nav_mainpage_onbase
+        # with self.left_nav_mainpage_onbase.canvas.before:
+        #     Color(1, 0.843, 0, 1)  # Золотой цвет
+        #     self.left_nav_rect = Line(rectangle=(
+        #     self.left_nav_mainpage_onbase.x, self.left_nav_mainpage_onbase.y, self.left_nav_mainpage_onbase.width,
+        #     self.left_nav_mainpage_onbase.height), width=2)
+        #
+        # self.left_nav_mainpage_onbase.bind(pos=self.update_left_nav_rect, size=self.update_left_nav_rect)
+
         return self.base_gridlayout
+
+    def update_base(self, *args):
+        self.central_bg.pos = self.base_gridlayout.pos
+        self.central_bg.size = self.base_gridlayout.size
+        self.central_rect.rectangle = (
+            self.base_gridlayout.x, self.base_gridlayout.y, self.base_gridlayout.width,
+            self.base_gridlayout.height)
+
+    # def update_central(self, *args):
+    #     self.central_bg.pos = self.central_mainpage_onbase.pos
+    #     self.central_bg.size = self.central_mainpage_onbase.size
+    #     self.central_rect.rectangle = (
+    #         self.central_mainpage_onbase.x, self.central_mainpage_onbase.y, self.central_mainpage_onbase.width,
+    #         self.central_mainpage_onbase.height)
+    #
+    # def update_left_nav_rect(self, *args):
+    #     self.left_nav_rect.rectangle = (
+    #         self.left_nav_mainpage_onbase.x, self.left_nav_mainpage_onbase.y, self.left_nav_mainpage_onbase.width,
+    #         self.left_nav_mainpage_onbase.height)
 
     def show_auth(self, instance):
         self.central_mainpage_onbase.clear_widgets()  # Очистить предыдущие виджеты
