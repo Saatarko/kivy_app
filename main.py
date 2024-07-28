@@ -193,14 +193,16 @@ class Auth(GridLayout):
 
     @staticmethod
     def validate_profile_data(first_name, last_name, age):
+        first_name = first_name.lower()
         for s in first_name:
             if len(s.strip(letters)) != 0:
                 message = 'В Имени допустимы только буквы!'
                 notification_manager.show_popup_error(message)
 
                 return False
-
+        last_name = last_name.lower()
         for s in last_name:
+
             if len(s.strip(letters)) != 0:
                 message = 'В Фамилии допустимы только буквы!'
                 notification_manager.show_popup_error(message)
@@ -213,6 +215,12 @@ class Auth(GridLayout):
                 notification_manager.show_popup_error(message)
 
                 return False
+
+        if not (0 <= int(age) <= 120):  # Допустим, возраст должен быть от 0 до 120 лет
+            message = 'Некорректный возраст!'
+            notification_manager.show_popup_error(message)
+            return False
+
         return True
 
     def create_people(self, instance, parent_layout):
@@ -269,11 +277,13 @@ class Auth(GridLayout):
         login_layout.add_widget(Widget())
         login_layout.add_widget(Label(text='Или зарегистрируйтесь', size_hint_x=0.5,
                                       pos_hint={'center_x': 0.5}))
+        login_layout.add_widget(Label(text='Регистрация', size_hint_x=0.5,
+                                      pos_hint={'center_x': 0.5}))
         login_layout.add_widget(Widget())
         login_layout.add_widget(Label(text='Введите логин(email)', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
         self.reg_username_input = TextInput(size_hint_x=0.5, multiline=False, pos_hint={'center_x': 0.5})
         login_layout.add_widget(self.reg_username_input)
-        login_layout.add_widget(Label(text='Пароль', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
+        login_layout.add_widget(Label(text='Пароль (минимум 4 символа)', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
         self.reg_password_input = TextInput(size_hint_x=0.5, password=True, multiline=False, pos_hint={'center_x': 0.5})
         login_layout.add_widget(self.reg_password_input)
         login_layout.add_widget(Label(text='Подтверждение пароля', size_hint_x=0.5, pos_hint={'center_x': 0.5}))
@@ -871,7 +881,9 @@ class Groups(GridLayout):
             temp_text = group['name']
             temp_id = group['id']
             groups_button = Button(text=temp_text,
-                                   background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1))
+                                   background_normal='gray.png', background_down='green.png', color=(0, 0, 0, 1),
+                                   text_size=(200, None), halign='center')
+
             groups_button.bind(
                 on_press=partial(self.groupe_in, temp_id=temp_id, result=result, left_layout=left_layout,
                                  parent_layout=parent_layout))
@@ -882,6 +894,7 @@ class Groups(GridLayout):
         left_layout.add_widget(groups_name_layout)
 
     def groupe_in(self, instance, temp_id, result, left_layout, parent_layout):
+        parent_layout.clear_widgets()
         left_layout.clear_widgets()
         for group in result:
             if group['id'] == temp_id:
@@ -1137,8 +1150,20 @@ class MyApp(App):
 
         central_mainpage_onbase = GridLayout(rows=1)
 
+
+
         self.central_mainpage_onbase = central_mainpage_onbase
         self.left_nav_mainpage_onbase = left_nav_mainpage_onbase
+
+        box = BoxLayout(orientation='vertical')
+
+        label_name = Label(text="Добрый день. Приветсвуем Вас в нашем приложении! Для доступа к курсам нужно "
+                                "зайти в свой аккаунт. Если у Вас нет аккаунта - зарегистрируйтесь. Если кроме просмотра"
+                                "курсов Вы захотите записаться в группу Вам нужно будет заполнить личные "
+                                "данные в профиле", text_size=(400, None),
+                           halign='center')
+        box.add_widget(label_name)
+        self.central_mainpage_onbase.add_widget(box)
 
         self.mainpage_onbase.add_widget(left_nav_mainpage_onbase)
         self.mainpage_onbase.add_widget(central_mainpage_onbase)
