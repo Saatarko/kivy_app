@@ -186,8 +186,8 @@ class Auth(GridLayout):
         notification_manager.show_popup_update_people()
 
     def on_update_people_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка обновления профиля: {msg}'
+
+        message = f'Ошибка обновления профиля: '
         notification_manager.show_popup_error(message)
 
     @staticmethod
@@ -252,8 +252,8 @@ class Auth(GridLayout):
         notification_manager.show_popup_create_people()
 
     def create_people_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка создания профиля: {msg}'
+
+        message = f'Ошибка создания профиля:'
         notification_manager.show_popup_error(message)
 
     def create_login_layout(self, parent_layout):
@@ -314,8 +314,8 @@ class Auth(GridLayout):
                    on_success=self.on_login_success, on_failure=self.on_login_failure)
 
     def on_login_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка аутентификации(некорректные данные или пользователя не существует)'
+
+        message = 'Ошибка аутентификации(некорректные данные или пользователя не существует)'
         notification_manager.show_popup_error(message)
         # print('Ошибка аутентификации:', request.resp_status, result)
 
@@ -344,8 +344,8 @@ class Auth(GridLayout):
                        on_failure=self.on_check_failure)
 
     def on_check_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка связи с севером: {msg}'
+
+        message = f'Ошибка связи с севером:'
         notification_manager.show_popup_error(message)
         # print('Ошибка аутентификации:', request.resp_status, result)
 
@@ -378,8 +378,7 @@ class Auth(GridLayout):
         # Обновление вкладки аутентификации
 
     def on_logout_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка при выходе из системы: {msg}'
+        message = 'Ошибка при выходе из системы: '
         notification_manager.show_popup_error(message)
 
     def check_token(self, parent_layout, left_layout):
@@ -433,8 +432,8 @@ class Auth(GridLayout):
             return type
 
     def on_check_profile_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка: {msg}'
+
+        message = 'Ошибка:'
         notification_manager.show_popup_error(message)
 
     def on_check_profile_success(self, request, result, callback=None):
@@ -513,8 +512,8 @@ class Auth(GridLayout):
             notification_manager.show_popup_error(message)
 
     def on_reg_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка регистрации: {msg}'
+
+        message = f'Ошибка регистрации:'
         notification_manager.show_popup_error(message)
 
     def on_reg_success(self, request, result, password):
@@ -584,8 +583,8 @@ class Courses(GridLayout):
             print('Ошибка: Заголовок Location отсутствует в ответе.')
 
     def on_courses_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка: {msg}'
+
+        message = f'Ошибка загрузки списка курсов'
         notification_manager.show_popup_error(message)
 
     def on_courses_success(self, request, result, parent_layout, left_layout):
@@ -656,8 +655,11 @@ class Courses(GridLayout):
                        on_failure=self.on_course_order_failure)
 
     def on_course_order_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка записи на курсы: {msg}'
+        if result['detail']:
+            msg = result['detail']
+            message = f'Ошибка записи на курсы:{msg}'
+        else:
+            message = 'Ошибка записи на курсы'
         notification_manager.show_popup_error(message)
 
     def on_course_order_success_and_add_groups(self, request, result, courses_id):
@@ -677,8 +679,8 @@ class Courses(GridLayout):
                        on_failure=self.on_course_order_failure_all)
 
     def on_course_order_failure_all(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка записи в группу: {msg}'
+
+        message = f'Ошибка записи в группу'
         notification_manager.show_popup_error(message)
 
     def on_course_order_success_all(self, request, result):
@@ -869,8 +871,8 @@ class Groups(GridLayout):
             print('Ошибка: Заголовок Location отсутствует в ответе.')
 
     def on_groups_failure(self, request, result):
-        msg = result['detail']
-        message = f'Ошибка при загрузке данных по группам: {msg}'
+
+        message = 'Ошибка при загрузке данных по группам: '
         notification_manager.show_popup_error(message)
 
     def on_groups_success(self, request, result, parent_layout, left_layout):
@@ -1046,7 +1048,7 @@ class Groups(GridLayout):
                    on_failure=self.on_open_lection_failure)
 
     def on_open_lection_failure(self, request, result):
-        # msg = result['detail']
+
         message = 'Ошибка при загрузке данных по лекциям'
         notification_manager.show_popup_error(message)
 
