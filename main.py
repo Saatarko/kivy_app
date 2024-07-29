@@ -1,3 +1,4 @@
+
 from kivy.config import Config
 
 Config.set('graphics', 'width', '600')
@@ -32,6 +33,13 @@ import websockets
 import threading
 import asynckivy
 import httpx
+import tempfile
+from kivy.app import App
+from kivy.utils import platform
+import os
+import shutil
+import sys
+from plyer import storagepath
 
 
 letters = 'abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрстуфхцчшщъыьэюя-'
@@ -1293,8 +1301,19 @@ class MyApp(App):
 
     def on_stop(self):
         # Очистка кэша при завершении работы приложения
-        self.store.clear()
+        # self.store.clear()
 
+        try:
+            if hasattr(self, 'store'):
+                self.store.clear()  # Используйте store.clear() напрямую
+        except Exception as e:
+            print(f"Не удалось очистить хранилище: {e}")
+
+        # for thread in threading.enumerate():
+        #     if thread is not threading.current_thread():
+        #         thread.join(timeout=1)  # Ожидание завершения потока
+
+        os._exit(0)
 
 
 def on_start(self):

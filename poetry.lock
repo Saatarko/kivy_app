@@ -403,6 +403,23 @@ files = [
 requests = "*"
 
 [[package]]
+name = "plyer"
+version = "2.1.0"
+description = "Platform-independent wrapper for platform-dependent APIs"
+optional = false
+python-versions = "*"
+files = [
+    {file = "plyer-2.1.0-py2.py3-none-any.whl", hash = "sha256:1b1772060df8b3045ed4f08231690ec8f7de30f5a004aa1724665a9074eed113"},
+    {file = "plyer-2.1.0.tar.gz", hash = "sha256:65b7dfb7e11e07af37a8487eb2aa69524276ef70dad500b07228ce64736baa61"},
+]
+
+[package.extras]
+android = ["pyjnius"]
+dev = ["flake8", "mock"]
+ios = ["pyobjus"]
+macosx = ["pyobjus"]
+
+[[package]]
 name = "pygments"
 version = "2.18.0"
 description = "Pygments is a syntax highlighting package written in Python."
@@ -597,4 +614,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "7538cb2874e974b166768b2a8417618001bb1ad6bb787594e1963ec415b7efd0"
+content-hash = "53f20223b2f193068b71f8850f741f6ac98e0edb8666253519728c3006aa856b"
