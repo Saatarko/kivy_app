@@ -8,7 +8,7 @@
 
 # Backend:
 
-Вместо Frontend - внешнее приложение на Kivi
+Серверная часть - backend на Fastapi
 https://github.com/Saatarko/-ourses-Fast_api-.git
 
 # Технологии:
@@ -139,7 +139,7 @@ External application on Kivy (instead of Frontend) - IT schools with courses, co
 
 # Backend:
 
-Instead of Frontend - an external application on Kivi
+Server part - backend on Fastapi
 https://github.com/Saatarko/-ourses-Fast_api-.git
 
 # Technologies:
